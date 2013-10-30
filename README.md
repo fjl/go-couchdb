@@ -6,7 +6,7 @@ functionality that I need.
 
 The API is not fully baked at this time and may change.
 
-This project contains two Go packages:
+This project contains three Go packages:
 
 ## package couchdb
 
@@ -21,7 +21,15 @@ This wraps the CouchDB HTTP API.
 This provides functionality similar to the original
 [couchapp](https://github.com/couchapp/couchapp) tool,
 namely compiling a filesystem directory into a JSON object
-and storing the object as a CouchDB design document. 
+and storing the object as a CouchDB design document.
+
+## package couchdeamon
+
+    import "github.com/fjl/go-couchdb/couchdaemon"
+
+This package contains some functions that help
+you write Go programs that run as a daemon started by CouchDB,
+e.g. fetching values from the CouchDB config. 
 
 # Tests
 
