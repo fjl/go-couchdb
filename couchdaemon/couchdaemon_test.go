@@ -2,7 +2,10 @@ package couchdaemon
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 )
@@ -47,6 +50,35 @@ func TestConfig(t *testing.T) {
 	}
 	if stdout.String() != `["get","a","b","c"]`+"\n" {
 		t.Errorf("wrong JSON output: %q", stdout.String())
+	}
+}
+
+func TestServerURL(t *testing.T) {
+	// create temporary URI file
+	url := "http://127.0.0.1:5984/"
+	tmpf, err := ioutil.TempFile(os.TempDir(), "couchdaemon-test-uri")
+	if err != nil {
+		t.Fatalf("couldn't create temporary URL file: %v", err)
+	}
+	tmpf.WriteString(url + "\n")
+	tmpf.Sync()
+	tmpf.Close()
+	defer os.Remove(tmpf.Name())
+
+	// queue config response
+	defer stdout.Reset()
+	go func() {
+		resp, _ := json.Marshal(tmpf.Name())
+		stdin_w.Write(append(resp, '\n'))
+	}()
+
+	// the actual test
+	respurl, err := ServerURL()
+	if err != nil {
+		t.Fatalf("ServerURL() returned error: %v", err)
+	}
+	if respurl != url {
+		t.Errorf("wrong URL returned: %q != %q", respurl, url)
 	}
 }
 

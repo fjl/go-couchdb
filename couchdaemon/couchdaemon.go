@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 )
 
@@ -54,6 +55,19 @@ func Config(val interface{}, path ...string) error {
 		return fmt.Errorf("couldn't get %v from config: %v", path, err)
 	}
 	return nil
+}
+
+// ServerURL returns the URL of the CouchDB server that started the daemon.
+func ServerURL() (string, error) {
+	var urifile string
+	if err := Config(&urifile, "couchdb", "uri_file"); err != nil {
+		return "", err
+	}
+	if uri, err := ioutil.ReadFile(urifile); err != nil {
+		return "", fmt.Errorf("couldn't open CouchDB URI file: %v", err)
+	} else {
+		return string(bytes.TrimRight(uri, "\r\n")), nil
+	}
 }
 
 // Log creates a writer that outputs to the CouchDB log.
