@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/fjl/go-couchdb.png?branch=master)](https://travis-ci.org/fjl/go-couchdb)
+
 # What's this?
 
 go-couchdb is yet another CouchDB client written in Go.
@@ -29,7 +31,7 @@ and storing the object as a CouchDB design document.
 
 This package contains some functions that help
 you write Go programs that run as a daemon started by CouchDB,
-e.g. fetching values from the CouchDB config. 
+e.g. fetching values from the CouchDB config.
 
 # Tests
 
