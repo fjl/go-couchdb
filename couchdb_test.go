@@ -1,204 +1,226 @@
 package couchdb
 
 import (
-	"math/rand"
+	"bytes"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
-	"time"
 )
 
-var (
-	srv = NewServer("http://127.0.0.1:5984")
-)
+type testServer struct {
+	*Server
+	t        *testing.T
+	handlers map[string]http.Handler
+}
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
+func (s *testServer) Handle(pat string, f func(http.ResponseWriter, *http.Request)) {
+	s.handlers[pat] = http.HandlerFunc(f)
+}
+
+func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
+	handler, ok := s.handlers[req.Method+" "+req.URL.Path]
+	if !ok {
+		s.t.Fatalf("unhandled request: %s %s", req.Method, req.URL.Path)
+		return nil, nil
+	}
+	recorder := httptest.NewRecorder()
+	recorder.Body = new(bytes.Buffer)
+	handler.ServeHTTP(recorder, req)
+	resp := &http.Response{
+		StatusCode:    recorder.Code, // TODO: other status fields
+		Header:        recorder.HeaderMap,
+		ContentLength: int64(recorder.Body.Len()),
+		Body:          ioutil.NopCloser(recorder.Body),
+		Request:       req,
+	}
+	return resp, nil
+}
+
+func newTestServer(t *testing.T) *testServer {
+	srv := &testServer{t: t, handlers: make(map[string]http.Handler)}
+	srv.Server = NewServer("http://testserver:5984/", srv)
+	return srv
 }
 
 func TestPing(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})
+
 	if err := srv.Ping(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestDatabaseAPI(t *testing.T) {
-	dbname := "go-couch-test-db-api"
+func TestDb(t *testing.T) {
+	srv := newTestServer(t)
+	db := srv.Db("db")
+	check(t, "db.Name", "db", db.Name())
+}
 
-	db := srv.Db(dbname)
-	if db.Name() != dbname {
-		t.Errorf("db name %#v did not match %#v", db.Name(), dbname)
-	}
+func TestCreateDb(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("PUT /db", func(resp http.ResponseWriter, req *http.Request) {})
 
-	db, err := srv.CreateDb(dbname)
+	db, err := srv.CreateDb("db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if db.Name() != dbname {
-		t.Errorf("db name %#v did not match %#v", db.Name(), dbname)
+	check(t, "db.Name", "db", db.Name())
+}
+
+func TestOpenDb(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /db", func(resp http.ResponseWriter, req *http.Request) {
+		io.WriteString(resp, `
+{"db_name":"db","doc_count":1,"doc_del_count":0,"update_seq":1,"purge_seq":0,"compact_running":false,"disk_size":8290,"data_size":2024,"instance_start_time":"1384798820687932","disk_format_version":6,"committed_update_seq":1}`)
+	})
+
+	db, err := srv.OpenDb("db")
+	if err != nil {
+		t.Fatal(err)
 	}
+	check(t, "db.Name", "db", db.Name())
+}
+
+func TestDeleteDb(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("DELETE /db", func(resp http.ResponseWriter, req *http.Request) {})
+	if err := srv.DeleteDb("db"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAllDbs(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /_all_dbs", func(resp http.ResponseWriter, req *http.Request) {
+		io.WriteString(resp, `["a","b","c"]`)
+	})
 
 	names, err := srv.AllDbs()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsStr(dbname, names) {
-		t.Errorf("_all_dbs didn't contain %v", dbname)
-	}
+	check(t, "returned names", []string{"a", "b", "c"}, names)
+}
 
-	db, err = srv.OpenDb(dbname)
-	if err != nil {
+type testDocument struct {
+	Rev   string `json:"_rev,omitempty"`
+	Field int64  `json:"field"`
+}
+
+func TestGetExistingDoc(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+		io.WriteString(resp, `{"_id":"doc","_rev":"1-619db7ba8551c0de3f3a178775509611","field":999}`)
+	})
+
+	var doc testDocument
+	if err := srv.Db("db").Get("doc", nil, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if db.Name() != dbname {
-		t.Errorf("db name %#v did not match %#v", db.Name(), dbname)
-	}
-
-	err = srv.DeleteDb(dbname)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
+	check(t, "doc.Field", int64(999), doc.Field)
 }
 
-type TestDocument struct {
-	Rev          string `json:"_rev,omitempty"`
-	RandomNumber int
-}
+func TestGetNonexistingDoc(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+		resp.WriteHeader(404)
+		io.WriteString(resp, `{"error":"not_found","reason":"error reason"}`)
+	})
 
-func newTestdoc() TestDocument {
-	return TestDocument{
-		RandomNumber: rand.Intn(100000) + 1,
-	}
-}
-
-func TestGetNonexisting(t *testing.T) {
-	db := resetDb(t, "go-couch-test-doc-api")
-
-	var doc TestDocument
-	err := db.Get("non-existing-test-doc", nil, doc)
-	if !NotFound(err) {
-		t.Errorf("db.Get returned unexpected error: %+v", err)
-	}
+	var doc testDocument
+	err := srv.Db("db").Get("doc", nil, doc)
+	check(t, "NotFound(err)", true, NotFound(err))
 }
 
 func TestPut(t *testing.T) {
-	db := resetDb(t, "go-couch-test-doc-api")
+	srv := newTestServer(t)
+	srv.Handle("PUT /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"field":999}`, string(body))
 
-	docid := "test-put-doc"
-	doc := newTestdoc()
-	rev, err := db.Put(docid, doc)
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(http.StatusCreated)
+		io.WriteString(resp, `{"id":"doc","ok":true,"rev":"1-619db7ba8551c0de3f3a178775509611"}`)
+	})
+
+	doc := &testDocument{Field: 999}
+	rev, err := srv.Db("db").Put("doc", doc)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	var fromdb TestDocument
-	if err := db.Get(docid, nil, &fromdb); err != nil {
-		t.Fatal(err)
-	}
-	if fromdb.Rev != rev {
-		t.Errorf("rev did not match, %q != %q", fromdb.Rev, rev)
-	}
-	if fromdb.RandomNumber != doc.RandomNumber {
-		t.Errorf("doc.RandomNumber did not match, %v != %v",
-			fromdb.RandomNumber, doc.RandomNumber)
-	}
+	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
 
 func TestDelete(t *testing.T) {
-	dbname := "go-couch-test-doc-api"
-	db := resetDb(t, dbname)
+	srv := newTestServer(t)
+	srv.Handle("DELETE /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+		check(t, "request query string", "rev=1-619db7ba8551c0de3f3a178775509611", req.URL.RawQuery)
 
-	docid := "test-delete-doc"
-	rev, err := db.Put(docid, newTestdoc())
-	if err != nil {
-		t.Fatal(err)
-	}
+		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(http.StatusOK)
+		io.WriteString(resp, `{"id":"doc","ok":true,"rev":"2-619db7ba8551c0de3f3a178775509611"}`)
+	})
 
-	if _, err := db.Delete(docid, rev); err != nil {
+	delrev := "1-619db7ba8551c0de3f3a178775509611"
+	if rev, err := srv.Db("db").Delete("doc", delrev); err != nil {
 		t.Fatal(err)
+	} else {
+		check(t, "returned rev", "2-619db7ba8551c0de3f3a178775509611", rev)
 	}
 }
 
 func TestDbUpdatesFeed(t *testing.T) {
-	db := resetDb(t, "go-couch-test-db-events")
+	srv := newTestServer(t)
+	srv.Handle("GET /_db_updates", func(resp http.ResponseWriter, req *http.Request) {
+		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
+		io.WriteString(resp, `{"db_name":"db","ok":true,"type":"created"}`+"\n")
+	})
 
 	feed, err := srv.Updates(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	docid := "test-doc-1"
-	_, err = db.Put(docid, newTestdoc())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	event, err := feed.Next()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	t.Logf("event: %+v", event)
-	if event.Name != db.Name() {
-		t.Errorf("database name didn't match, %q != %q", event.Name, db.Name())
-	}
-	if event.Type != "updated" {
-		t.Errorf("type didn't match, %q != %q", event.Type, "updated")
-	}
+	check(t, "event name", "db", event.Name)
+	check(t, "event type", "created", event.Type)
 
 	feed.Close()
 }
 
 func TestChangesFeed(t *testing.T) {
-	db := resetDb(t, "go-couch-test-doc-events")
+	srv := newTestServer(t)
+	srv.Handle("GET /db/_changes", func(resp http.ResponseWriter, req *http.Request) {
+		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
+		io.WriteString(resp, `{"seq":1,"id":"doc","changes":[{"rev":"1-619db7ba8551c0de3f3a178775509611"}]}`)
+	})
 
+	db := srv.Db("db")
 	feed, err := db.Changes(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	docid := "test-doc-1"
-	_, err = db.Put(docid, newTestdoc())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	event, err := feed.Next()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("event: %+v", event)
-	if event.Id != docid {
-		t.Fatal("id didn't match")
-	}
-	if event.Database != db {
-		t.Fatal("database didn't match")
-	}
+	check(t, "event id", "doc", event.Id)
+	check(t, "event seq", int64(1), event.Seq)
+	check(t, "event database", db, event.Database)
 
 	feed.Close()
 }
 
-// Helper function that deletes and recreates a database.
-func resetDb(t *testing.T, name string) *Database {
-	srv.DeleteDb(name) // ignore error
-
-	// wait a bit until deletion is complete
-	// if this is not done, the CreateDb will
-	// mysteriously fail sometimes
-	time.Sleep(10 * time.Millisecond)
-
-	if db, err := srv.CreateDb(name); err != nil {
-		t.Fatal(err)
-		return nil
-	} else {
-		return db
+func check(t *testing.T, field string, expected, actual interface{}) {
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("%s mismatch: want %#v, got %#v", field, expected, actual)
 	}
-}
-
-func containsStr(needle string, slice []string) bool {
-	for _, s := range slice {
-		if s == needle {
-			return true
-		}
-	}
-	return false
 }

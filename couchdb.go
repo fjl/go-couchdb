@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Server struct {
@@ -18,8 +19,11 @@ type Server struct {
 	http   *http.Client
 }
 
-func NewServer(url string) *Server {
-	return &Server{prefix: url, http: &http.Client{}}
+func NewServer(url string, transport http.RoundTripper) *Server {
+	return &Server{
+		prefix: strings.TrimRight(url, "/"),
+		http:   &http.Client{Transport: transport},
+	}
 }
 
 func (srv *Server) url(options Options, path ...string) (string, error) {
@@ -52,7 +56,11 @@ func (opts Options) clone() (result Options) {
 // query encodes an Options map as an URL query string
 func (opts Options) writeTo(buf *bytes.Buffer) error {
 	buf.WriteRune('?')
+	amp := false
 	for k, v := range opts {
+		if amp {
+			buf.WriteRune('&')
+		}
 		buf.WriteString(url.QueryEscape(k))
 		buf.WriteRune('=')
 
@@ -65,7 +73,7 @@ func (opts Options) writeTo(buf *bytes.Buffer) error {
 			}
 			buf.WriteString(url.QueryEscape(string(jsonv)))
 		}
-		buf.WriteRune('&')
+		amp = true
 	}
 	return nil
 }
@@ -115,7 +123,7 @@ func (srv *Server) closedRequest(
 // Ping can be used to check whether a server is alive.
 // It sends an HTTP HEAD request to the server's URL.
 func (srv *Server) Ping() error {
-	_, err := srv.http.Head(srv.prefix)
+	_, err := srv.http.Head(srv.prefix + "/")
 	return err
 }
 
@@ -261,7 +269,7 @@ func NotFound(err error) bool {
 func dbError(resp *http.Response) error {
 	var reply struct{ Error, Reason string }
 	if err := readBody(resp, &reply); err != nil {
-		return err
+		return fmt.Errorf("couldn't decode CouchDB error: %v", err)
 	}
 
 	return DatabaseError{

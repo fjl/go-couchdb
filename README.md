@@ -37,5 +37,3 @@ e.g. fetching values from the CouchDB config.
 
 You can run the unit tests with `go test`.
 
-The tests expect CouchDB to be running at `http://127.0.0.1:5984`.
-
