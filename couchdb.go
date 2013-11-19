@@ -19,6 +19,10 @@ type Server struct {
 	http   *http.Client
 }
 
+// NewServer creates a new server object.
+//
+// The second argument can be nil to use the default
+// http.RoundTripper, which should be good enough in most cases.
 func NewServer(url string, transport http.RoundTripper) *Server {
 	return &Server{
 		prefix: strings.TrimRight(url, "/"),
