@@ -27,16 +27,16 @@ type DbEventFeed struct {
 func (srv *Server) Updates(options Options) (*DbEventFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
-	resp, err := srv.request("GET", nil, newopts, "_db_updates")
+	path, err := optpath(newopts, "_db_updates")
 	if err != nil {
 		return nil, err
-	} else {
-		feed := &DbEventFeed{
-			Closer: resp.Body,
-			dec:    json.NewDecoder(resp.Body),
-		}
-		return feed, nil
 	}
+	resp, err := srv.request("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	feed := &DbEventFeed{Closer: resp.Body, dec: json.NewDecoder(resp.Body)}
+	return feed, nil
 }
 
 // Next decodes the next event in a _db_updates feed.
@@ -72,17 +72,20 @@ type ChangesFeed struct {
 func (db *Database) Changes(options Options) (*ChangesFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
-	resp, err := db.srv.request("GET", nil, newopts, db.name, "_changes")
+	path, err := optpath(newopts, db.name, "_changes")
 	if err != nil {
 		return nil, err
-	} else {
-		feed := &ChangesFeed{
-			Closer: resp.Body,
-			db:     db,
-			dec:    json.NewDecoder(resp.Body),
-		}
-		return feed, nil
 	}
+	resp, err := db.srv.request("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	feed := &ChangesFeed{
+		Closer: resp.Body,
+		db:     db,
+		dec:    json.NewDecoder(resp.Body),
+	}
+	return feed, nil
 }
 
 // Next decodes an event from a _changes feed.

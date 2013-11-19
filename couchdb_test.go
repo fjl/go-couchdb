@@ -20,6 +20,10 @@ func (s *testServer) Handle(pat string, f func(http.ResponseWriter, *http.Reques
 	s.handlers[pat] = http.HandlerFunc(f)
 }
 
+func (s *testServer) ClearHandlers() {
+	s.handlers = make(map[string]http.Handler)
+}
+
 func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	handler, ok := s.handlers[req.Method+" "+req.URL.Path]
 	if !ok {
@@ -49,6 +53,63 @@ func TestPing(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})
 
+	if err := srv.Ping(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoginSuccess(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /_session", func(resp http.ResponseWriter, req *http.Request) {
+		auth := req.Header.Get("Authorization")
+		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
+
+		io.WriteString(resp, `{
+			"ok": true,
+			"userCtx": {"name":"user","roles":["_admin"]},
+			"info":{
+				"authentication_db": "_users",
+				"authentication_handlers": ["oauth","cookie","default"],
+				"authenticated": "default"
+			}
+		}`)
+	})
+	if err := srv.Login("user", "password"); err != nil {
+		t.Fatal(err)
+	}
+
+	srv.ClearHandlers()
+	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {
+		auth := req.Header.Get("Authorization")
+		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
+	})
+	if err := srv.Ping(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoginFailure(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("GET /_session", func(resp http.ResponseWriter, req *http.Request) {
+		auth := req.Header.Get("Authorization")
+		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
+
+		resp.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(resp, `{
+			"error":  "unauthorized",
+			"reason": "Name or password is incorrect."
+		}`)
+	})
+	err := srv.Login("user", "password")
+	check(t, "Unauthorized(err)", true, Unauthorized(err))
+
+	// verify that auth information is not persisted in the server
+	// if the login failed
+	srv.ClearHandlers()
+	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {
+		auth := req.Header.Get("Authorization")
+		check(t, "basic auth header", "", auth)
+	})
 	if err := srv.Ping(); err != nil {
 		t.Fatal(err)
 	}

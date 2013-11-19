@@ -17,6 +17,11 @@ import (
 type Server struct {
 	prefix string // URL prefix
 	http   *http.Client
+	auth   *auth
+}
+
+type auth struct {
+	username, password string
 }
 
 // NewServer creates a new server object.
@@ -28,21 +33,6 @@ func NewServer(url string, transport http.RoundTripper) *Server {
 		prefix: strings.TrimRight(url, "/"),
 		http:   &http.Client{Transport: transport},
 	}
-}
-
-func (srv *Server) url(options Options, path ...string) (string, error) {
-	buf := new(bytes.Buffer)
-	buf.WriteString(srv.prefix)
-	for _, p := range path {
-		buf.WriteRune('/')
-		buf.WriteString(url.QueryEscape(p))
-	}
-	if len(options) > 0 {
-		if err := options.writeTo(buf); err != nil {
-			return "", err
-		}
-	}
-	return buf.String(), nil
 }
 
 // CouchDB query string values are URL-encoded JSON.
@@ -58,7 +48,8 @@ func (opts Options) clone() (result Options) {
 }
 
 // query encodes an Options map as an URL query string
-func (opts Options) writeTo(buf *bytes.Buffer) error {
+func (opts Options) encode() (string, error) {
+	buf := new(bytes.Buffer)
 	buf.WriteRune('?')
 	amp := false
 	for k, v := range opts {
@@ -67,57 +58,82 @@ func (opts Options) writeTo(buf *bytes.Buffer) error {
 		}
 		buf.WriteString(url.QueryEscape(k))
 		buf.WriteRune('=')
-
 		if strval, ok := v.(string); ok {
 			buf.WriteString(url.QueryEscape(strval))
 		} else {
 			jsonv, err := json.Marshal(v)
 			if err != nil {
-				return err
+				return "", err
 			}
 			buf.WriteString(url.QueryEscape(string(jsonv)))
 		}
 		amp = true
 	}
-	return nil
+	return buf.String(), nil
 }
 
-// request sends an HTTP request to a CouchDB server.
-// The request URL is constructed from the path segments
-// and the encoded query string.
-// Status codes >= 400 are treated as errors.
-func (srv *Server) request(
-	method string,
+func path(segs ...string) (r string) {
+	for _, seg := range segs {
+		r += "/"
+		r += url.QueryEscape(seg)
+	}
+	return
+}
+
+func optpath(opts Options, segs ...string) (r string, err error) {
+	r = path(segs...)
+	if len(opts) > 0 {
+		if os, err := opts.encode(); err == nil {
+			r += os
+		}
+	}
+	return
+}
+
+func (srv *Server) newRequest(
+	method, path string,
 	body io.Reader,
-	options Options,
-	path ...string,
-) (*http.Response, error) {
-	url, err := srv.url(options, path...)
+) (*http.Request, error) {
+	req, err := http.NewRequest(method, srv.prefix+path, body)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(method, url, body)
+	if srv.auth != nil {
+		req.SetBasicAuth(srv.auth.username, srv.auth.password)
+	}
+	return req, nil
+}
+
+// request sends an HTTP request to a CouchDB server.
+// The request URL is constructed from the server's
+// prefix and the given path, which may contain an
+// encoded query string.
+//
+// Status codes >= 400 are treated as errors.
+func (srv *Server) request(
+	method, path string,
+	body io.Reader,
+) (*http.Response, error) {
+	req, err := srv.newRequest(method, path, body)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := srv.http.Do(req)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode >= 400 {
+	} else if resp.StatusCode >= 400 {
 		return nil, dbError(resp) // the Body is closed by dbError
+	} else {
+		return resp, nil
 	}
-	return resp, nil
 }
 
 // closedRequest sends a for-effect HTTP request.
 func (srv *Server) closedRequest(
-	method string,
+	method, path string,
 	body io.Reader,
-	options Options,
-	path ...string,
 ) (*http.Response, error) {
-	resp, err := srv.request(method, body, options, path...)
+	resp, err := srv.request(method, path, body)
 	if err == nil {
 		resp.Body.Close()
 	}
@@ -127,8 +143,40 @@ func (srv *Server) closedRequest(
 // Ping can be used to check whether a server is alive.
 // It sends an HTTP HEAD request to the server's URL.
 func (srv *Server) Ping() error {
-	_, err := srv.http.Head(srv.prefix + "/")
+	req, err := srv.newRequest("HEAD", "/", nil)
+	if err != nil {
+		return err
+	}
+	_, err = srv.http.Do(req)
 	return err
+}
+
+// Login initiates a user session.
+//
+// Any requests made after a successful call to
+// Login will be authenticated.
+func (srv *Server) Login(username, password string) error {
+	req, err := srv.newRequest("GET", "/_session", nil)
+	if err != nil {
+		return err
+	}
+
+	req.SetBasicAuth(username, password)
+	if resp, err := srv.http.Do(req); err != nil {
+		return err
+	} else if resp.StatusCode >= 400 {
+		return dbError(resp)
+	} else {
+		srv.auth = &auth{username, password}
+		resp.Body.Close()
+		return nil
+	}
+}
+
+// Logout deletes the active session.
+func (srv *Server) Logout() error {
+	srv.auth = nil
+	return nil
 }
 
 // Db returns a database object attached to the given
@@ -141,7 +189,7 @@ func (srv *Server) Db(dbname string) *Database {
 // Check whether the given database exists on the server.
 func (srv *Server) OpenDb(dbname string) (db *Database, err error) {
 	// maybe HEAD would be more appropriate
-	if _, err = srv.closedRequest("GET", nil, nil, dbname); err == nil {
+	if _, err = srv.closedRequest("GET", path(dbname), nil); err == nil {
 		db = srv.Db(dbname)
 	}
 	return
@@ -149,19 +197,19 @@ func (srv *Server) OpenDb(dbname string) (db *Database, err error) {
 
 // Create a new database on the given server.
 func (srv *Server) CreateDb(dbname string) (db *Database, err error) {
-	if _, err = srv.closedRequest("PUT", nil, nil, dbname); err == nil {
+	if _, err = srv.closedRequest("PUT", path(dbname), nil); err == nil {
 		db = srv.Db(dbname)
 	}
 	return
 }
 
 func (srv *Server) DeleteDb(dbname string) error {
-	_, err := srv.closedRequest("DELETE", nil, nil, dbname)
+	_, err := srv.closedRequest("DELETE", path(dbname), nil)
 	return err
 }
 
 func (srv *Server) AllDbs() (names []string, err error) {
-	resp, err := srv.request("GET", nil, nil, "_all_dbs")
+	resp, err := srv.request("GET", "/_all_dbs", nil)
 	if err == nil {
 		err = readBody(resp, &names)
 	}
@@ -180,7 +228,11 @@ func (db *Database) Name() string {
 
 // Retrieve a document from the given database.
 func (db *Database) Get(id string, opts Options, doc interface{}) error {
-	resp, err := db.srv.request("GET", nil, opts, db.name, id)
+	path, err := optpath(opts, db.name, id)
+	if err != nil {
+		return err
+	}
+	resp, err := db.srv.request("GET", path, nil)
 	if err != nil {
 		return err
 	}
@@ -193,7 +245,7 @@ func (db *Database) Put(id string, doc interface{}) (string, error) {
 		return "", err
 	} else {
 		reader := bytes.NewReader(json)
-		resp, err := db.srv.closedRequest("PUT", reader, nil, db.name, id)
+		resp, err := db.srv.closedRequest("PUT", path(db.name, id), reader)
 		if err != nil {
 			return "", err
 		}
@@ -205,9 +257,9 @@ func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
 	} else {
-		opts := Options{"rev": rev}
+		path, _ := optpath(Options{"rev": rev}, db.name, id)
 		reader := bytes.NewReader(json)
-		resp, err := db.srv.closedRequest("PUT", reader, opts, db.name, id)
+		resp, err := db.srv.closedRequest("PUT", path, reader)
 		if err != nil {
 			return "", err
 		}
@@ -216,8 +268,8 @@ func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
 }
 
 func (db *Database) Delete(id, rev string) (string, error) {
-	opts := Options{"rev": rev}
-	resp, err := db.srv.closedRequest("DELETE", nil, opts, db.name, id)
+	path, _ := optpath(Options{"rev": rev}, db.name, id)
+	resp, err := db.srv.closedRequest("DELETE", path, nil)
 	if err != nil {
 		return "", err
 	}
@@ -238,8 +290,11 @@ func (db *Database) Query(
 	opts Options,
 	doc interface{},
 ) error {
-	resp, err :=
-		db.srv.request("GET", nil, opts, db.name, "_design", ddoc, "_view", view)
+	path, err := optpath(opts, db.name, "_design", ddoc, "_view", view)
+	if err != nil {
+		return err
+	}
+	resp, err := db.srv.request("GET", path, nil)
 	if err != nil {
 		return err
 	}
@@ -267,7 +322,15 @@ func (e DatabaseError) Error() string {
 // for conditional creation of databases and documents.
 func NotFound(err error) bool {
 	dberr, ok := err.(DatabaseError)
-	return ok && dberr.StatusCode == 404
+	return ok && dberr.StatusCode == http.StatusNotFound
+}
+
+// Convenience function that checks whether the given error
+// is a DatabaseError with StatusCode == 401. This is useful
+// to check for failed logins.
+func Unauthorized(err error) bool {
+	dberr, ok := err.(DatabaseError)
+	return ok && dberr.StatusCode == http.StatusUnauthorized
 }
 
 func dbError(resp *http.Response) error {
