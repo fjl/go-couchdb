@@ -23,7 +23,7 @@ This provides functionality similar to the original
 namely compiling a filesystem directory into a JSON object
 and storing the object as a CouchDB design document.
 
-## package couchdeamon [![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb/couchdaemon)
+## package couchdaemon [![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb/couchdaemon)
 
     import "github.com/fjl/go-couchdb/couchdaemon"
 
