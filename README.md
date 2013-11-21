@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/fjl/go-couchdb.png?branch=master)](https://travis-ci.org/fjl/go-couchdb)
+[![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb)
 
 # What's this?
 
