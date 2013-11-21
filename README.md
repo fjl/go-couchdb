@@ -1,6 +1,3 @@
-[![Build Status](https://travis-ci.org/fjl/go-couchdb.png?branch=master)](https://travis-ci.org/fjl/go-couchdb)
-[![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb)
-
 # What's this?
 
 go-couchdb is yet another CouchDB client written in Go.
@@ -11,13 +8,13 @@ The API is not fully baked at this time and may change.
 
 This project contains three Go packages:
 
-## package couchdb
+## package couchdb [![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb)
 
     import "github.com/fjl/go-couchdb"
 
 This wraps the CouchDB HTTP API.
 
-## package couchapp
+## package couchapp [![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb/couchapp)
 
     import "github.com/fjl/go-couchdb/couchapp"
 
@@ -26,7 +23,7 @@ This provides functionality similar to the original
 namely compiling a filesystem directory into a JSON object
 and storing the object as a CouchDB design document.
 
-## package couchdeamon
+## package couchdeamon [![GoDoc](https://godoc.org/github.com/fjl/go-couchdb?status.png)](http://godoc.org/github.com/fjl/go-couchdb/couchdaemon)
 
     import "github.com/fjl/go-couchdb/couchdaemon"
 
@@ -38,3 +35,4 @@ e.g. fetching values from the CouchDB config.
 
 You can run the unit tests with `go test`.
 
+[![Build Status](https://travis-ci.org/fjl/go-couchdb.png?branch=master)](https://travis-ci.org/fjl/go-couchdb)
