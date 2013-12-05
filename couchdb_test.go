@@ -34,7 +34,11 @@ func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	recorder.Body = new(bytes.Buffer)
 	handler.ServeHTTP(recorder, req)
 	resp := &http.Response{
-		StatusCode:    recorder.Code, // TODO: other status fields
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		StatusCode:    recorder.Code,
+		Status:        http.StatusText(recorder.Code),
 		Header:        recorder.HeaderMap,
 		ContentLength: int64(recorder.Body.Len()),
 		Body:          ioutil.NopCloser(recorder.Body),
@@ -135,8 +139,19 @@ func TestCreateDb(t *testing.T) {
 func TestOpenDb(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("GET /db", func(resp http.ResponseWriter, req *http.Request) {
-		io.WriteString(resp, `
-{"db_name":"db","doc_count":1,"doc_del_count":0,"update_seq":1,"purge_seq":0,"compact_running":false,"disk_size":8290,"data_size":2024,"instance_start_time":"1384798820687932","disk_format_version":6,"committed_update_seq":1}`)
+		io.WriteString(resp, `{
+			"db_name": "db",
+			"doc_count": 1,
+			"doc_del_count": 0,
+			"update_seq": 1,
+			"purge_seq": 0,
+			"compact_running": false,
+			"disk_size": 8290,
+			"data_size": 2024,
+			"instance_start_time": "1384798820687932",
+			"disk_format_version": 6,
+			"committed_update_seq": 1
+		}`)
 	})
 
 	db, err := srv.OpenDb("db")
@@ -175,7 +190,11 @@ type testDocument struct {
 func TestGetExistingDoc(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
-		io.WriteString(resp, `{"_id":"doc","_rev":"1-619db7ba8551c0de3f3a178775509611","field":999}`)
+		io.WriteString(resp, `{
+			"_id": "doc",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+			"field": 999
+		}`)
 	})
 
 	var doc testDocument
@@ -206,7 +225,11 @@ func TestPut(t *testing.T) {
 
 		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
 		resp.WriteHeader(http.StatusCreated)
-		io.WriteString(resp, `{"id":"doc","ok":true,"rev":"1-619db7ba8551c0de3f3a178775509611"}`)
+		io.WriteString(resp, `{
+			 "id": "doc",
+			 "ok": true,
+			 "rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
 	})
 
 	doc := &testDocument{Field: 999}
@@ -220,11 +243,17 @@ func TestPut(t *testing.T) {
 func TestDelete(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("DELETE /db/doc", func(resp http.ResponseWriter, req *http.Request) {
-		check(t, "request query string", "rev=1-619db7ba8551c0de3f3a178775509611", req.URL.RawQuery)
+		check(t, "request query string",
+			"rev=1-619db7ba8551c0de3f3a178775509611",
+			req.URL.RawQuery)
 
 		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
 		resp.WriteHeader(http.StatusOK)
-		io.WriteString(resp, `{"id":"doc","ok":true,"rev":"2-619db7ba8551c0de3f3a178775509611"}`)
+		io.WriteString(resp, `{
+			"id": "doc",
+			"ok": true,
+			"rev": "2-619db7ba8551c0de3f3a178775509611"
+		}`)
 	})
 
 	delrev := "1-619db7ba8551c0de3f3a178775509611"
@@ -239,7 +268,11 @@ func TestDbUpdatesFeed(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("GET /_db_updates", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
-		io.WriteString(resp, `{"db_name":"db","ok":true,"type":"created"}`+"\n")
+		io.WriteString(resp, `{
+			"db_name": "db",
+			"ok": true,
+			"type": "created"
+		}`+"\n")
 	})
 
 	feed, err := srv.Updates(nil)
@@ -260,7 +293,11 @@ func TestChangesFeed(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("GET /db/_changes", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
-		io.WriteString(resp, `{"seq":1,"id":"doc","changes":[{"rev":"1-619db7ba8551c0de3f3a178775509611"}]}`)
+		io.WriteString(resp, `{
+			"seq": 1,
+			"id": "doc",
+			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
+		}`)
 	})
 
 	db := srv.Db("db")
@@ -272,7 +309,6 @@ func TestChangesFeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	check(t, "event id", "doc", event.Id)
 	check(t, "event seq", int64(1), event.Seq)
 	check(t, "event database", db, event.Database)
