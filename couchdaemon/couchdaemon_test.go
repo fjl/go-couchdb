@@ -3,6 +3,7 @@ package couchdaemon
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -38,15 +39,14 @@ func TestLog(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	defer stdout.Reset()
-	go func() { io.WriteString(stdin_w, "12345678\n") }()
+	expVal := "12345678"
 
-	var res int
-	if err := Config(&res, "a", "b", "c"); err != nil {
-		t.Errorf("Config() call returned error: %v", err)
-	}
-	if res != 12345678 {
-		t.Errorf("result value doesn't match: %v", res)
+	defer stdout.Reset()
+	go func() { fmt.Fprintf(stdin_w, "%q\n", expVal) }()
+
+	val := Config("a/b/c")
+	if val != expVal {
+		t.Errorf("result value mismatch: want %q, got: %q", expVal, val)
 	}
 	if stdout.String() != `["get","a","b","c"]`+"\n" {
 		t.Errorf("wrong JSON output: %q", stdout.String())

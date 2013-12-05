@@ -3,13 +3,13 @@
 package couchdaemon
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 )
 
 // TODO: the implementation is a bit hard to test due to the
@@ -17,7 +17,7 @@ import (
 
 var (
 	reqchan  = make(chan request)
-	respchan = make(chan []byte)
+	respchan = make(chan string, 1)
 )
 
 // Init configures stdin and stdout for communication with couchdb.
@@ -48,20 +48,19 @@ func start(stdin io.Reader, stdout io.Writer, exit func()) {
 }
 
 // Config reads a parameter value from the couchdb configuration.
-func Config(val interface{}, path ...string) error {
-	req := request{readresp: true, query: append([]string{"get"}, path...)}
+// The path elements are separated by '/', e.g. "vendor/version".
+// The returned string will be empty if the parameter is unset.
+func Config(path string) string {
+	req := request{readresp: true, query: strings.Split("get/"+path, "/")}
 	reqchan <- req
-	if err := json.Unmarshal(<-respchan, val); err != nil {
-		return fmt.Errorf("couldn't get %v from config: %v", path, err)
-	}
-	return nil
+	return <-respchan
 }
 
 // ServerURL returns the URL of the CouchDB server that started the daemon.
 func ServerURL() (string, error) {
-	var urifile string
-	if err := Config(&urifile, "couchdb", "uri_file"); err != nil {
-		return "", err
+	var urifile = Config("couchdb/uri_file")
+	if urifile == "" {
+		return "", fmt.Errorf("missing couchdb/uri_file in config")
 	}
 	if uri, err := ioutil.ReadFile(urifile); err != nil {
 		return "", fmt.Errorf("couldn't open CouchDB URI file: %v", err)
@@ -98,19 +97,25 @@ func writeloop(stdout io.Writer) {
 		out.Encode(req.query)
 		if !req.readresp {
 			// unblock caller
-			respchan <- nil
+			respchan <- ""
 		}
 	}
 }
 
 func readloop(stdin io.Reader, exit func()) {
-	in := bufio.NewReader(stdin)
+	dec := json.NewDecoder(stdin)
 	for {
-		if line, err := in.ReadBytes('\n'); err != nil {
-			break
+		var resp string
+		err := dec.Decode(&resp)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Fprintf(os.Stderr, "couchdaemon: response decoding error: %v\n", err)
+			}
+			respchan <- ""
+			exit()
+			return
 		} else {
-			respchan <- line
+			respchan <- resp
 		}
 	}
-	exit()
 }
