@@ -68,8 +68,8 @@ func TestServerURL(t *testing.T) {
 	// queue config response
 	defer stdout.Reset()
 	go func() {
-		resp, _ := json.Marshal(tmpf.Name())
-		stdin_w.Write(append(resp, '\n'))
+		stdin_w.Write("127.0.0.1\n")
+		stdin_w.Write("5984\n")
 	}()
 
 	// the actual test

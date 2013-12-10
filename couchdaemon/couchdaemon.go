@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -57,16 +56,12 @@ func Config(path string) string {
 }
 
 // ServerURL returns the URL of the CouchDB server that started the daemon.
-func ServerURL() (string, error) {
-	var urifile = Config("couchdb/uri_file")
-	if urifile == "" {
-		return "", fmt.Errorf("missing couchdb/uri_file in config")
+func ServerURL() string {
+	addr := Config("httpd/bind_address")
+	if addr == "0.0.0.0" {
+		addr = "127.0.0.1"
 	}
-	if uri, err := ioutil.ReadFile(urifile); err != nil {
-		return "", fmt.Errorf("couldn't open CouchDB URI file: %v", err)
-	} else {
-		return string(bytes.TrimRight(uri, "\r\n")), nil
-	}
+	return "http://" + addr + ":" + Config("httpd/port") + "/"
 }
 
 // Log creates a writer that outputs to the CouchDB log.
