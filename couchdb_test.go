@@ -53,6 +53,11 @@ func newTestServer(t *testing.T) *testServer {
 	return srv
 }
 
+func TestServerURL(t *testing.T) {
+	srv := newTestServer(t)
+	check(t, "srv.URL()", "http://testserver:5984", srv.URL())
+}
+
 func TestPing(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})

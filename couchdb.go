@@ -140,6 +140,13 @@ func (srv *Server) closedRequest(
 	return resp, err
 }
 
+// URL returns the URL prefix of the server.
+//
+// The prefix does not contain a trailing '/'.
+func (srv *Server) URL() string {
+	return srv.prefix
+}
+
 // Ping can be used to check whether a server is alive.
 // It sends an HTTP HEAD request to the server's URL.
 func (srv *Server) Ping() error {
