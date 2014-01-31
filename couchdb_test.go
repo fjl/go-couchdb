@@ -8,6 +8,7 @@ import (
 	. "net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"testing"
 )
 
@@ -137,6 +138,72 @@ func TestDb(t *testing.T) {
 	srv := newTestServer(t)
 	db := srv.Db("db")
 	check(t, "db.Name", "db", db.Name())
+}
+
+// those are re-used across several tests
+var securityObjectJSON = regexp.MustCompile("\\s").ReplaceAllString(
+	`{
+		"admins": {
+			"names": ["adminName1", "adminName2"]
+		},
+		"members": {
+			"names": ["memberName1"],
+			"roles": ["memberRole1"]
+		}
+	}`, "")
+var securityObject = &couchdb.DbSecurity{
+	Admins: couchdb.DbMembers{
+		Names: []string{"adminName1", "adminName2"},
+		Roles: nil,
+	},
+	Members: couchdb.DbMembers{
+		Names: []string{"memberName1"},
+		Roles: []string{"memberRole1"},
+	},
+}
+
+func TestSecurity(t *testing.T) {
+	srv := newTestServer(t)
+	db := srv.Db("db")
+	srv.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
+		io.WriteString(resp, securityObjectJSON)
+	})
+
+	secobj, err := db.Security()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "secobj", securityObject, secobj)
+}
+
+func TestSetSecurity(t *testing.T) {
+	srv := newTestServer(t)
+	db := srv.Db("db")
+	srv.Handle("PUT /db/_security", func(resp ResponseWriter, req *Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", securityObjectJSON, string(body))
+		resp.WriteHeader(200)
+	})
+
+	err := db.SetSecurity(securityObject)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEmptySecurity(t *testing.T) {
+	srv := newTestServer(t)
+	db := srv.Db("db")
+	srv.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
+		// CouchDB returns an empty reply if no security object has been set
+		resp.WriteHeader(200)
+	})
+
+	secobj, err := db.Security()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "secobj", &couchdb.DbSecurity{}, secobj)
 }
 
 func TestCreateDb(t *testing.T) {

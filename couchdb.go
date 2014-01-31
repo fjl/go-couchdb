@@ -228,9 +228,42 @@ type Database struct {
 	srv  *Server
 }
 
+type DbSecurity struct {
+	Admins  DbMembers `json:"admins"`
+	Members DbMembers `json:"members"`
+}
+
+type DbMembers struct {
+	Names []string `json:"names,omitempty"`
+	Roles []string `json:"roles,omitempty"`
+}
+
 // Name returns the database's name
 func (db *Database) Name() string {
 	return db.name
+}
+
+func (db *Database) Security() (*DbSecurity, error) {
+	secobj := new(DbSecurity)
+	resp, err := db.srv.request("GET", path(db.name, "_security"), nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.ContentLength == 0 {
+		// empty reply means defaults
+		return secobj, nil
+	}
+	if err = readBody(resp, secobj); err != nil {
+		return nil, err
+	}
+	return secobj, nil
+}
+
+func (db *Database) SetSecurity(secobj *DbSecurity) error {
+	json, _ := json.Marshal(secobj)
+	body := bytes.NewReader(json)
+	_, err := db.srv.request("PUT", path(db.name, "_security"), body)
+	return err
 }
 
 // Retrieve a document from the given database.
