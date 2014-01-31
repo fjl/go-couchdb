@@ -1,30 +1,39 @@
-package couchdb
+package couchdb_test
 
 import (
 	"bytes"
+	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
-	"net/http"
+	. "net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 )
 
+// testServer is a very special couchdb.Server that also implements
+// the http.RoundTripper interface. The tests can register HTTP
+// handlers on the testServer. Any requests made through the server are
+// dispatched to a matching handler. This allows us to test what the
+// HTTP client in the couchdb package does without actually using the network.
+//
+// If no handler matches the requests method/path combination, the test
+// fails with a descriptive error.
 type testServer struct {
-	*Server
+	*couchdb.Server
 	t        *testing.T
-	handlers map[string]http.Handler
+	handlers map[string]Handler
 }
 
-func (s *testServer) Handle(pat string, f func(http.ResponseWriter, *http.Request)) {
-	s.handlers[pat] = http.HandlerFunc(f)
+func (s *testServer) Handle(pat string, f func(ResponseWriter, *Request)) {
+	s.handlers[pat] = HandlerFunc(f)
 }
 
 func (s *testServer) ClearHandlers() {
-	s.handlers = make(map[string]http.Handler)
+	s.handlers = make(map[string]Handler)
 }
 
-func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
+func (s *testServer) RoundTrip(req *Request) (*Response, error) {
 	handler, ok := s.handlers[req.Method+" "+req.URL.Path]
 	if !ok {
 		s.t.Fatalf("unhandled request: %s %s", req.Method, req.URL.Path)
@@ -33,12 +42,12 @@ func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	recorder := httptest.NewRecorder()
 	recorder.Body = new(bytes.Buffer)
 	handler.ServeHTTP(recorder, req)
-	resp := &http.Response{
+	resp := &Response{
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
 		StatusCode:    recorder.Code,
-		Status:        http.StatusText(recorder.Code),
+		Status:        StatusText(recorder.Code),
 		Header:        recorder.HeaderMap,
 		ContentLength: int64(recorder.Body.Len()),
 		Body:          ioutil.NopCloser(recorder.Body),
@@ -48,8 +57,8 @@ func (s *testServer) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func newTestServer(t *testing.T) *testServer {
-	srv := &testServer{t: t, handlers: make(map[string]http.Handler)}
-	srv.Server = NewServer("http://testserver:5984/", srv)
+	srv := &testServer{t: t, handlers: make(map[string]Handler)}
+	srv.Server = couchdb.NewServer("http://testserver:5984/", srv)
 	return srv
 }
 
@@ -60,7 +69,7 @@ func TestServerURL(t *testing.T) {
 
 func TestPing(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})
+	srv.Handle("HEAD /", func(resp ResponseWriter, req *Request) {})
 
 	if err := srv.Ping(); err != nil {
 		t.Fatal(err)
@@ -69,7 +78,7 @@ func TestPing(t *testing.T) {
 
 func TestLoginSuccess(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /_session", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /_session", func(resp ResponseWriter, req *Request) {
 		auth := req.Header.Get("Authorization")
 		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
 
@@ -88,7 +97,7 @@ func TestLoginSuccess(t *testing.T) {
 	}
 
 	srv.ClearHandlers()
-	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("HEAD /", func(resp ResponseWriter, req *Request) {
 		auth := req.Header.Get("Authorization")
 		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
 	})
@@ -99,23 +108,23 @@ func TestLoginSuccess(t *testing.T) {
 
 func TestLoginFailure(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /_session", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /_session", func(resp ResponseWriter, req *Request) {
 		auth := req.Header.Get("Authorization")
 		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
 
-		resp.WriteHeader(http.StatusUnauthorized)
+		resp.WriteHeader(StatusUnauthorized)
 		io.WriteString(resp, `{
 			"error":  "unauthorized",
 			"reason": "Name or password is incorrect."
 		}`)
 	})
 	err := srv.Login("user", "password")
-	check(t, "Unauthorized(err)", true, Unauthorized(err))
+	check(t, "Unauthorized(err)", true, couchdb.Unauthorized(err))
 
 	// verify that auth information is not persisted in the server
 	// if the login failed
 	srv.ClearHandlers()
-	srv.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("HEAD /", func(resp ResponseWriter, req *Request) {
 		auth := req.Header.Get("Authorization")
 		check(t, "basic auth header", "", auth)
 	})
@@ -132,7 +141,7 @@ func TestDb(t *testing.T) {
 
 func TestCreateDb(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("PUT /db", func(resp http.ResponseWriter, req *http.Request) {})
+	srv.Handle("PUT /db", func(resp ResponseWriter, req *Request) {})
 
 	db, err := srv.CreateDb("db")
 	if err != nil {
@@ -143,7 +152,7 @@ func TestCreateDb(t *testing.T) {
 
 func TestOpenDb(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /db", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /db", func(resp ResponseWriter, req *Request) {
 		io.WriteString(resp, `{
 			"db_name": "db",
 			"doc_count": 1,
@@ -168,7 +177,7 @@ func TestOpenDb(t *testing.T) {
 
 func TestDeleteDb(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("DELETE /db", func(resp http.ResponseWriter, req *http.Request) {})
+	srv.Handle("DELETE /db", func(resp ResponseWriter, req *Request) {})
 	if err := srv.DeleteDb("db"); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +185,7 @@ func TestDeleteDb(t *testing.T) {
 
 func TestAllDbs(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /_all_dbs", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /_all_dbs", func(resp ResponseWriter, req *Request) {
 		io.WriteString(resp, `["a","b","c"]`)
 	})
 
@@ -194,7 +203,7 @@ type testDocument struct {
 
 func TestGetExistingDoc(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
 		io.WriteString(resp, `{
 			"_id": "doc",
 			"_rev": "1-619db7ba8551c0de3f3a178775509611",
@@ -212,24 +221,24 @@ func TestGetExistingDoc(t *testing.T) {
 
 func TestGetNonexistingDoc(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
 		resp.WriteHeader(404)
 		io.WriteString(resp, `{"error":"not_found","reason":"error reason"}`)
 	})
 
 	var doc testDocument
 	err := srv.Db("db").Get("doc", nil, doc)
-	check(t, "NotFound(err)", true, NotFound(err))
+	check(t, "NotFound(err)", true, couchdb.NotFound(err))
 }
 
 func TestPut(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("PUT /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("PUT /db/doc", func(resp ResponseWriter, req *Request) {
 		body, _ := ioutil.ReadAll(req.Body)
 		check(t, "request body", `{"field":999}`, string(body))
 
 		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
-		resp.WriteHeader(http.StatusCreated)
+		resp.WriteHeader(StatusCreated)
 		io.WriteString(resp, `{
 			 "id": "doc",
 			 "ok": true,
@@ -247,13 +256,13 @@ func TestPut(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("DELETE /db/doc", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("DELETE /db/doc", func(resp ResponseWriter, req *Request) {
 		check(t, "request query string",
 			"rev=1-619db7ba8551c0de3f3a178775509611",
 			req.URL.RawQuery)
 
 		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
-		resp.WriteHeader(http.StatusOK)
+		resp.WriteHeader(StatusOK)
 		io.WriteString(resp, `{
 			"id": "doc",
 			"ok": true,
@@ -271,7 +280,7 @@ func TestDelete(t *testing.T) {
 
 func TestDbUpdatesFeed(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /_db_updates", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /_db_updates", func(resp ResponseWriter, req *Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"db_name": "db",
@@ -296,7 +305,7 @@ func TestDbUpdatesFeed(t *testing.T) {
 
 func TestChangesFeed(t *testing.T) {
 	srv := newTestServer(t)
-	srv.Handle("GET /db/_changes", func(resp http.ResponseWriter, req *http.Request) {
+	srv.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"seq": 1,
