@@ -284,12 +284,8 @@ func (db *Database) Put(id string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
 	} else {
-		reader := bytes.NewReader(json)
-		resp, err := db.srv.closedRequest("PUT", path(db.name, id), reader)
-		if err != nil {
-			return "", err
-		}
-		return responseRev(resp)
+		b := bytes.NewReader(json)
+		return responseRev(db.srv.closedRequest("PUT", path(db.name, id), b))
 	}
 }
 
@@ -298,27 +294,21 @@ func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
 		return "", err
 	} else {
 		path, _ := optpath(Options{"rev": rev}, db.name, id)
-		reader := bytes.NewReader(json)
-		resp, err := db.srv.closedRequest("PUT", path, reader)
-		if err != nil {
-			return "", err
-		}
-		return responseRev(resp)
+		b := bytes.NewReader(json)
+		return responseRev(db.srv.closedRequest("PUT", path, b))
 	}
 }
 
 func (db *Database) Delete(id, rev string) (string, error) {
 	path, _ := optpath(Options{"rev": rev}, db.name, id)
-	resp, err := db.srv.closedRequest("DELETE", path, nil)
-	if err != nil {
-		return "", err
-	}
-	return responseRev(resp)
+	return responseRev(db.srv.closedRequest("DELETE", path, nil))
 }
 
 // responseRev returns the unquoted Etag of a response.
-func responseRev(resp *http.Response) (string, error) {
-	if etag := resp.Header.Get("Etag"); etag == "" {
+func responseRev(resp *http.Response, err error) (string, error) {
+	if err != nil {
+		return "", nil
+	} else if etag := resp.Header.Get("Etag"); etag == "" {
 		return "", fmt.Errorf("no Etag in response")
 	} else {
 		return etag[1 : len(etag)-1], nil
