@@ -351,16 +351,26 @@ func (e DatabaseError) Error() string {
 // is a DatabaseError with StatusCode == 404. This is useful
 // for conditional creation of databases and documents.
 func NotFound(err error) bool {
-	dberr, ok := err.(DatabaseError)
-	return ok && dberr.StatusCode == http.StatusNotFound
+	return ErrorStatus(err, http.StatusNotFound)
 }
 
 // Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 401. This is useful
-// to check for failed logins.
+// is a DatabaseError with StatusCode == 401.
 func Unauthorized(err error) bool {
+	return ErrorStatus(err, http.StatusUnauthorized)
+}
+
+// Convenience function that checks whether the given error
+// is a DatabaseError with StatusCode == 409.
+func Conflict(err error) bool {
+	return ErrorStatus(err, http.StatusConflict)
+}
+
+// ErrorStatus checks whether the given error
+// is a DatabaseError with a matching statusCode.
+func ErrorStatus(err error, statusCode int) bool {
 	dberr, ok := err.(DatabaseError)
-	return ok && dberr.StatusCode == http.StatusUnauthorized
+	return ok && dberr.StatusCode == statusCode
 }
 
 func dbError(resp *http.Response) error {
