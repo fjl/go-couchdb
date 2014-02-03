@@ -368,6 +368,37 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestPutAttachment(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("PUT /db/doc/attachment/1",
+		func(resp ResponseWriter, req *Request) {
+			reqBodyContent, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctype := req.Header.Get("Content-Type")
+			check(t, "request content type", "text/plain", ctype)
+			check(t, "request body", "the content", string(reqBodyContent))
+			check(t, "request query string",
+				"rev=1-619db7ba8551c0de3f3a178775509611",
+				req.URL.RawQuery)
+
+			resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
+		})
+
+	rev := "1-619db7ba8551c0de3f3a178775509611"
+	att := &couchdb.Attachment{
+		Name: "attachment/1",
+		Type: "text/plain",
+		Body: bytes.NewBufferString("the content"),
+	}
+	newrev, err := srv.Db("db").PutAttachment("doc", rev, att)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "response rev", "2-619db7ba8551c0de3f3a178775509611", newrev)
+}
+
 func TestDbUpdatesFeed(t *testing.T) {
 	srv := newTestServer(t)
 	srv.Handle("GET /_db_updates", func(resp ResponseWriter, req *Request) {

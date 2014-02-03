@@ -350,6 +350,54 @@ func (db *Database) Query(
 	return readBody(resp, &viewResult)
 }
 
+// Attachment represents document attachments.
+type Attachment struct {
+	Name string
+	Type string // the MIME type name of the Body
+	Body io.Reader
+}
+
+// PutAttachment creates or updates a document attachment.
+// To create an attachment on a non-existing document, pass an empty
+// string as the rev.
+func (db *Database) PutAttachment(
+	docid, rev string,
+	att *Attachment,
+) (newrev string, err error) {
+	if docid == "" {
+		return "", fmt.Errorf("couchdb.PutAttachment: empty docid")
+	}
+	if att.Name == "" {
+		return "", fmt.Errorf("couchdb.PutAttachment: empty filename")
+	}
+
+	// create the request
+	var p string
+	if rev == "" {
+		p = path(db.name, docid, att.Name)
+	} else {
+		p, _ = optpath(Options{"rev": rev}, db.name, docid, att.Name)
+	}
+	req, err := db.srv.newRequest("PUT", p, att.Body)
+	if err != nil {
+		return "", err
+	}
+	if att.Type != "" {
+		req.Header.Add("Content-Type", att.Type)
+	}
+
+	// execute it
+	resp, err := db.srv.http.Do(req)
+	if err != nil {
+		return "", err
+	} else if resp.StatusCode >= 400 {
+		return "", dbError(resp) // the Body is closed by dbError
+	} else {
+		resp.Body.Close()
+		return responseRev(resp, nil)
+	}
+}
+
 // Errors of this type are returned for API-level errors,
 // i.e. for all errors that are reported by CouchDB as
 //    {"error": <ErrorCode>, "reason": <Reason>}
