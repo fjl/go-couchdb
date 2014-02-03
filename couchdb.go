@@ -303,7 +303,7 @@ func (db *Database) Delete(id, rev string) (string, error) {
 // responseRev returns the unquoted Etag of a response.
 func responseRev(resp *http.Response, err error) (string, error) {
 	if err != nil {
-		return "", nil
+		return "", err
 	} else if etag := resp.Header.Get("Etag"); etag == "" {
 		return "", fmt.Errorf("no Etag in response")
 	} else {
