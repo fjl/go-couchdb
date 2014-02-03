@@ -141,7 +141,6 @@ func (srv *Server) closedRequest(
 }
 
 // URL returns the URL prefix of the server.
-//
 // The prefix does not contain a trailing '/'.
 func (srv *Server) URL() string {
 	return srv.prefix
@@ -155,9 +154,7 @@ func (srv *Server) Ping() error {
 }
 
 // Login initiates a user session.
-//
-// Any requests made after a successful call to
-// Login will be authenticated.
+// Any requests made after a successful call to Login will be authenticated.
 func (srv *Server) Login(username, password string) error {
 	req, err := srv.newRequest("GET", "/_session", nil)
 	if err != nil {
@@ -239,6 +236,8 @@ func (db *Database) Name() string {
 	return db.name
 }
 
+// Security retrieves the database security object, which defines its
+// access control rules.
 func (db *Database) Security() (*DbSecurity, error) {
 	secobj := new(DbSecurity)
 	resp, err := db.srv.request("GET", path(db.name, "_security"), nil)
@@ -255,6 +254,7 @@ func (db *Database) Security() (*DbSecurity, error) {
 	return secobj, nil
 }
 
+// SetSecurity sets the database security object.
 func (db *Database) SetSecurity(secobj *DbSecurity) error {
 	json, _ := json.Marshal(secobj)
 	body := bytes.NewReader(json)
@@ -262,7 +262,11 @@ func (db *Database) SetSecurity(secobj *DbSecurity) error {
 	return err
 }
 
-// Retrieve a document from the given database.
+// Get retrieves a document from the given database.
+// The document is unmarshalled into the given object.
+// Some fields (like _conflicts) will only be returned if the
+// options require it. Please refer to the CouchDB HTTP API documentation
+// for more information.
 func (db *Database) Get(id string, opts Options, doc interface{}) error {
 	path, err := optpath(opts, db.name, id)
 	if err != nil {
@@ -275,7 +279,10 @@ func (db *Database) Get(id string, opts Options, doc interface{}) error {
 	return readBody(resp, &doc)
 }
 
-// Store a document into the given database.
+// Put stores a document into the given database.
+// If the document is already present in the database, the
+// marshalled JSON representation of doc must include a _rev member
+// or the request will fail with "409 Conflict".
 func (db *Database) Put(id string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
@@ -285,6 +292,10 @@ func (db *Database) Put(id string, doc interface{}) (string, error) {
 	}
 }
 
+// PutRev stores a document into the given database.
+// In contrast to the Put method, the current revision must be
+// given explicitly, which can be useful if your document representation
+// does not include a _rev member.
 func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
@@ -295,6 +306,7 @@ func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
 	}
 }
 
+// Delete marks a document revision as deleted.
 func (db *Database) Delete(id, rev string) (string, error) {
 	path, _ := optpath(Options{"rev": rev}, db.name, id)
 	return responseRev(db.srv.closedRequest("DELETE", path, nil))
@@ -311,10 +323,15 @@ func responseRev(resp *http.Response, err error) (string, error) {
 	}
 }
 
+// Query retrieves the contents of a view.
+// The output of the query is unmarshalled into the given viewResult.
+// The format of the result depends on the options. Please
+// refer to the CouchDB HTTP API documentation for all the possible
+// options that can be set.
 func (db *Database) Query(
 	ddoc, view string,
 	opts Options,
-	doc interface{},
+	viewResult interface{},
 ) error {
 	path, err := optpath(opts, db.name, "_design", ddoc, "_view", view)
 	if err != nil {
@@ -324,7 +341,7 @@ func (db *Database) Query(
 	if err != nil {
 		return err
 	}
-	return readBody(resp, &doc)
+	return readBody(resp, &viewResult)
 }
 
 // Errors of this type are returned for API-level errors,
