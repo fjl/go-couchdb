@@ -295,7 +295,30 @@ func TestGetNonexistingDoc(t *testing.T) {
 
 	var doc testDocument
 	err := srv.Db("db").Get("doc", nil, doc)
-	check(t, "NotFound(err)", true, couchdb.NotFound(err))
+	check(t, "couchdb.NotFound(err)", true, couchdb.NotFound(err))
+}
+
+func TestRev(t *testing.T) {
+	srv := newTestServer(t)
+	srv.Handle("HEAD /db/ok", func(resp ResponseWriter, req *Request) {
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+	})
+	srv.Handle("HEAD /db/404", func(resp ResponseWriter, req *Request) {
+		NotFound(resp, req)
+	})
+
+	rev, err := srv.Db("db").Rev("ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "rev", "1-619db7ba8551c0de3f3a178775509611", rev)
+
+	errorRev, err := srv.Db("db").Rev("404")
+	check(t, "errorRev", "", errorRev)
+	check(t, "couchdb.NotFound(err)", true, couchdb.NotFound(err))
+	if _, ok := err.(couchdb.DatabaseError); !ok {
+		t.Errorf("expected couchdb.DatabaseError, got %#+v", err)
+	}
 }
 
 func TestPut(t *testing.T) {

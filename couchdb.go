@@ -279,6 +279,12 @@ func (db *Database) Get(id string, opts Options, doc interface{}) error {
 	return readBody(resp, &doc)
 }
 
+// Rev fetches the current revision of a document.
+// It is faster than an equivalent Get request because no body has to parsed.
+func (db *Database) Rev(id string) (string, error) {
+	return responseRev(db.srv.closedRequest("HEAD", path(db.name, id), nil))
+}
+
 // Put stores a document into the given database.
 // If the document is already present in the database, the
 // marshalled JSON representation of doc must include a _rev member
