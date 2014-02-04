@@ -1,29 +1,50 @@
 package couchapp
 
 import (
-	"encoding/json"
+	"path"
+	"reflect"
 	"testing"
 )
 
-func TestCompile(t *testing.T) {
-	compiled, err := Compile("testdata/ok", nil)
+func TestLoadFile(t *testing.T) {
+	doc, err := LoadFile("testdata/doc.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if testing.Verbose() {
-		enc, _ := json.MarshalIndent(compiled, "", "    ")
-		t.Log(string(enc))
+	expdoc := Doc{
+		"_id":   "doc",
+		"float": 1.0,
+		"array": []interface{}{1.0, 2.0, 3.0},
 	}
+	check(t, "doc", expdoc, doc)
 }
 
-func TestCompileBrokenIgnorePattern(t *testing.T) {
-	config := &Config{
-		IgnorePatterns: []string{"("},
+func TestLoadDirectory(t *testing.T) {
+	doc, err := LoadDirectory("testdata/dir", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	_, err := Compile("testdata/ok", config)
-	if err == nil {
-		t.Error("no error returned although there were broken regexps")
+	expdoc := Doc{
+		"language": "javascript",
+		"views": map[string]interface{}{
+			"abc.xyz": map[string]interface{}{
+				"map": "function (x) { return x; }",
+			},
+		},
+	}
+	check(t, "doc", expdoc, doc)
+}
+
+func TestBrokenIgnorePattern(t *testing.T) {
+	doc, err := LoadDirectory("testdata/dir", []string{"[]"})
+	check(t, "doc", Doc(nil), doc)
+	check(t, "error", path.ErrBadPattern, err)
+}
+
+func check(t *testing.T, field string, expected, actual interface{}) {
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("%s mismatch: want %#v, got %#v", field, expected, actual)
 	}
 }
