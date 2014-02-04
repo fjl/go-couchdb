@@ -182,7 +182,7 @@ func StoreAttachments(
 		}
 
 		att := &couchdb.Attachment{
-			Name: strings.TrimPrefix(p, dir),
+			Name: strings.TrimPrefix(p, dir+"/"),
 			Type: mime.TypeByExtension(path.Ext(p)),
 		}
 		if att.Body, err = os.Open(p); err != nil {
