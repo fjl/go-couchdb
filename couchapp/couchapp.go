@@ -148,12 +148,12 @@ func findLine(data []byte, offset int64) (line int) {
 // Store updates the given document in a database.
 // If the document exists, it will be overwritten.
 // The new revision of the document is returned.
-func Store(db *couchdb.Database, docid string, doc Doc) (string, error) {
-	rev, err := db.Rev(docid)
+func Store(c *couchdb.Client, db, docid string, doc Doc) (string, error) {
+	rev, err := c.Rev(db, docid)
 	if err == nil {
-		return db.PutRev(docid, rev, doc)
+		return c.PutRev(db, docid, rev, doc)
 	} else if couchdb.NotFound(err) {
-		return db.Put(docid, doc)
+		return c.Put(db, docid, doc)
 	} else {
 		return "", err
 	}
@@ -170,8 +170,8 @@ func Store(db *couchdb.Database, docid string, doc Doc) (string, error) {
 //
 // A correct revision id is returned in all cases, even if there was an error.
 func StoreAttachments(
-	db *couchdb.Database,
-	docid, rev string,
+	client *couchdb.Client,
+	db, docid, rev string,
 	dir string,
 	ignores []string,
 ) (newrev string, err error) {
@@ -188,7 +188,7 @@ func StoreAttachments(
 		if att.Body, err = os.Open(p); err != nil {
 			return err
 		}
-		newrev, err = db.PutAttachment(docid, newrev, att)
+		newrev, err = client.PutAttachment(db, docid, newrev, att)
 		return err
 	})
 	return

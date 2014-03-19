@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-type Server struct {
+type Client struct {
 	prefix string // URL prefix
 	http   *http.Client
 	auth   *auth
@@ -24,12 +24,12 @@ type auth struct {
 	username, password string
 }
 
-// NewServer creates a new server object.
+// NewClient creates a new client object.
 //
 // The second argument can be nil to use the default
 // http.RoundTripper, which should be good enough in most cases.
-func NewServer(url string, transport http.RoundTripper) *Server {
-	return &Server{
+func NewClient(url string, transport http.RoundTripper) *Client {
+	return &Client{
 		prefix: strings.TrimRight(url, "/"),
 		http:   &http.Client{Transport: transport},
 	}
@@ -90,16 +90,16 @@ func optpath(opts Options, segs ...string) (r string, err error) {
 	return
 }
 
-func (srv *Server) newRequest(
+func (c *Client) newRequest(
 	method, path string,
 	body io.Reader,
 ) (*http.Request, error) {
-	req, err := http.NewRequest(method, srv.prefix+path, body)
+	req, err := http.NewRequest(method, c.prefix+path, body)
 	if err != nil {
 		return nil, err
 	}
-	if srv.auth != nil {
-		req.SetBasicAuth(srv.auth.username, srv.auth.password)
+	if c.auth != nil {
+		req.SetBasicAuth(c.auth.username, c.auth.password)
 	}
 	return req, nil
 }
@@ -110,15 +110,15 @@ func (srv *Server) newRequest(
 // encoded query string.
 //
 // Status codes >= 400 are treated as errors.
-func (srv *Server) request(
+func (c *Client) request(
 	method, path string,
 	body io.Reader,
 ) (*http.Response, error) {
-	req, err := srv.newRequest(method, path, body)
+	req, err := c.newRequest(method, path, body)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := srv.http.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
 	} else if resp.StatusCode >= 400 {
@@ -129,11 +129,11 @@ func (srv *Server) request(
 }
 
 // closedRequest sends a for-effect HTTP request.
-func (srv *Server) closedRequest(
+func (c *Client) closedRequest(
 	method, path string,
 	body io.Reader,
 ) (*http.Response, error) {
-	resp, err := srv.request(method, path, body)
+	resp, err := c.request(method, path, body)
 	if err == nil {
 		resp.Body.Close()
 	}
@@ -142,83 +142,62 @@ func (srv *Server) closedRequest(
 
 // URL returns the URL prefix of the server.
 // The prefix does not contain a trailing '/'.
-func (srv *Server) URL() string {
-	return srv.prefix
+func (c *Client) URL() string {
+	return c.prefix
 }
 
 // Ping can be used to check whether a server is alive.
 // It sends an HTTP HEAD request to the server's URL.
-func (srv *Server) Ping() error {
-	_, err := srv.closedRequest("HEAD", "/", nil)
+func (c *Client) Ping() error {
+	_, err := c.closedRequest("HEAD", "/", nil)
 	return err
 }
 
 // Login initiates a user session.
 // Any requests made after a successful call to Login will be authenticated.
-func (srv *Server) Login(username, password string) error {
-	req, err := srv.newRequest("GET", "/_session", nil)
+func (c *Client) Login(username, password string) error {
+	req, err := c.newRequest("GET", "/_session", nil)
 	if err != nil {
 		return err
 	}
 
 	req.SetBasicAuth(username, password)
-	if resp, err := srv.http.Do(req); err != nil {
+	if resp, err := c.http.Do(req); err != nil {
 		return err
 	} else if resp.StatusCode >= 400 {
 		return dbError(resp)
 	} else {
-		srv.auth = &auth{username, password}
+		c.auth = &auth{username, password}
 		resp.Body.Close()
 		return nil
 	}
 }
 
 // Logout deletes the active session.
-func (srv *Server) Logout() error {
-	srv.auth = nil
+func (c *Client) Logout() error {
+	c.auth = nil
 	return nil
 }
 
-// Db returns a database object attached to the given
-// server. No HTTP request is performed, so it is unclear
-// whether the database actually exists.
-func (srv *Server) Db(dbname string) *Database {
-	return &Database{srv: srv, name: dbname}
-}
-
-// Check whether the given database exists on the server.
-func (srv *Server) OpenDb(dbname string) (db *Database, err error) {
-	// maybe HEAD would be more appropriate
-	if _, err = srv.closedRequest("GET", path(dbname), nil); err == nil {
-		db = srv.Db(dbname)
-	}
-	return
-}
-
-// Create a new database on the given server.
-func (srv *Server) CreateDb(dbname string) (db *Database, err error) {
-	if _, err = srv.closedRequest("PUT", path(dbname), nil); err == nil {
-		db = srv.Db(dbname)
-	}
-	return
-}
-
-func (srv *Server) DeleteDb(dbname string) error {
-	_, err := srv.closedRequest("DELETE", path(dbname), nil)
+// CreateDb creates a new database.
+// The request will fail with status "412 Precondition Failed" if
+// the database already exists.
+func (c *Client) CreateDb(dbname string) error {
+	_, err := c.closedRequest("PUT", path(dbname), nil)
 	return err
 }
 
-func (srv *Server) AllDbs() (names []string, err error) {
-	resp, err := srv.request("GET", "/_all_dbs", nil)
+func (c *Client) DeleteDb(dbname string) error {
+	_, err := c.closedRequest("DELETE", path(dbname), nil)
+	return err
+}
+
+func (c *Client) AllDbs() (names []string, err error) {
+	resp, err := c.request("GET", "/_all_dbs", nil)
 	if err == nil {
 		err = readBody(resp, &names)
 	}
 	return
-}
-
-type Database struct {
-	name string
-	srv  *Server
 }
 
 type DbSecurity struct {
@@ -231,16 +210,11 @@ type DbMembers struct {
 	Roles []string `json:"roles,omitempty"`
 }
 
-// Name returns the database's name
-func (db *Database) Name() string {
-	return db.name
-}
-
 // Security retrieves the database security object, which defines its
 // access control rules.
-func (db *Database) Security() (*DbSecurity, error) {
+func (c *Client) Security(db string) (*DbSecurity, error) {
 	secobj := new(DbSecurity)
-	resp, err := db.srv.request("GET", path(db.name, "_security"), nil)
+	resp, err := c.request("GET", path(db, "_security"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -255,10 +229,10 @@ func (db *Database) Security() (*DbSecurity, error) {
 }
 
 // SetSecurity sets the database security object.
-func (db *Database) SetSecurity(secobj *DbSecurity) error {
+func (c *Client) SetSecurity(db string, secobj *DbSecurity) error {
 	json, _ := json.Marshal(secobj)
 	body := bytes.NewReader(json)
-	_, err := db.srv.request("PUT", path(db.name, "_security"), body)
+	_, err := c.request("PUT", path(db, "_security"), body)
 	return err
 }
 
@@ -267,12 +241,12 @@ func (db *Database) SetSecurity(secobj *DbSecurity) error {
 // Some fields (like _conflicts) will only be returned if the
 // options require it. Please refer to the CouchDB HTTP API documentation
 // for more information.
-func (db *Database) Get(id string, opts Options, doc interface{}) error {
-	path, err := optpath(opts, db.name, id)
+func (c *Client) Get(db, id string, opts Options, doc interface{}) error {
+	path, err := optpath(opts, db, id)
 	if err != nil {
 		return err
 	}
-	resp, err := db.srv.request("GET", path, nil)
+	resp, err := c.request("GET", path, nil)
 	if err != nil {
 		return err
 	}
@@ -281,20 +255,20 @@ func (db *Database) Get(id string, opts Options, doc interface{}) error {
 
 // Rev fetches the current revision of a document.
 // It is faster than an equivalent Get request because no body has to parsed.
-func (db *Database) Rev(id string) (string, error) {
-	return responseRev(db.srv.closedRequest("HEAD", path(db.name, id), nil))
+func (c *Client) Rev(db, id string) (string, error) {
+	return responseRev(c.closedRequest("HEAD", path(db, id), nil))
 }
 
 // Put stores a document into the given database.
 // If the document is already present in the database, the
 // marshalled JSON representation of doc must include a _rev member
 // or the request will fail with "409 Conflict".
-func (db *Database) Put(id string, doc interface{}) (string, error) {
+func (c *Client) Put(db, id string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
 	} else {
 		b := bytes.NewReader(json)
-		return responseRev(db.srv.closedRequest("PUT", path(db.name, id), b))
+		return responseRev(c.closedRequest("PUT", path(db, id), b))
 	}
 }
 
@@ -302,20 +276,20 @@ func (db *Database) Put(id string, doc interface{}) (string, error) {
 // In contrast to the Put method, the current revision must be
 // given explicitly, which can be useful if your document representation
 // does not include a _rev member.
-func (db *Database) PutRev(id, rev string, doc interface{}) (string, error) {
+func (c *Client) PutRev(db, id, rev string, doc interface{}) (string, error) {
 	if json, err := json.Marshal(doc); err != nil {
 		return "", err
 	} else {
-		path, _ := optpath(Options{"rev": rev}, db.name, id)
+		path, _ := optpath(Options{"rev": rev}, db, id)
 		b := bytes.NewReader(json)
-		return responseRev(db.srv.closedRequest("PUT", path, b))
+		return responseRev(c.closedRequest("PUT", path, b))
 	}
 }
 
 // Delete marks a document revision as deleted.
-func (db *Database) Delete(id, rev string) (string, error) {
-	path, _ := optpath(Options{"rev": rev}, db.name, id)
-	return responseRev(db.srv.closedRequest("DELETE", path, nil))
+func (c *Client) Delete(db, id, rev string) (string, error) {
+	path, _ := optpath(Options{"rev": rev}, db, id)
+	return responseRev(c.closedRequest("DELETE", path, nil))
 }
 
 // responseRev returns the unquoted Etag of a response.
@@ -334,16 +308,16 @@ func responseRev(resp *http.Response, err error) (string, error) {
 // The format of the result depends on the options. Please
 // refer to the CouchDB HTTP API documentation for all the possible
 // options that can be set.
-func (db *Database) Query(
-	ddoc, view string,
+func (c *Client) Query(
+	db, ddoc, view string,
 	opts Options,
 	viewResult interface{},
 ) error {
-	path, err := optpath(opts, db.name, "_design", ddoc, "_view", view)
+	path, err := optpath(opts, db, "_design", ddoc, "_view", view)
 	if err != nil {
 		return err
 	}
-	resp, err := db.srv.request("GET", path, nil)
+	resp, err := c.request("GET", path, nil)
 	if err != nil {
 		return err
 	}
@@ -360,8 +334,8 @@ type Attachment struct {
 // PutAttachment creates or updates a document attachment.
 // To create an attachment on a non-existing document, pass an empty
 // string as the rev.
-func (db *Database) PutAttachment(
-	docid, rev string,
+func (c *Client) PutAttachment(
+	db, docid, rev string,
 	att *Attachment,
 ) (newrev string, err error) {
 	if docid == "" {
@@ -374,11 +348,11 @@ func (db *Database) PutAttachment(
 	// create the request
 	var p string
 	if rev == "" {
-		p = path(db.name, docid, att.Name)
+		p = path(db, docid, att.Name)
 	} else {
-		p, _ = optpath(Options{"rev": rev}, db.name, docid, att.Name)
+		p, _ = optpath(Options{"rev": rev}, db, docid, att.Name)
 	}
-	req, err := db.srv.newRequest("PUT", p, att.Body)
+	req, err := c.newRequest("PUT", p, att.Body)
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +361,7 @@ func (db *Database) PutAttachment(
 	}
 
 	// execute it
-	resp, err := db.srv.http.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return "", err
 	} else if resp.StatusCode >= 400 {

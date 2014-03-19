@@ -24,14 +24,14 @@ type DbEventFeed struct {
 // a database is created, updated or deleted.
 //
 // Don't forget to Close() the feed.
-func (srv *Server) Updates(options Options) (*DbEventFeed, error) {
+func (c *Client) DbUpdates(options Options) (*DbEventFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
 	path, err := optpath(newopts, "_db_updates")
 	if err != nil {
 		return nil, err
 	}
-	resp, err := srv.request("GET", path, nil)
+	resp, err := c.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -49,19 +49,19 @@ func (f *DbEventFeed) Next() (event DbEvent, err error) {
 }
 
 // This is the representation for the events returned
-// in a database _changes feed.
+// in a database _changes feed. The feed will send regular
 type DocEvent struct {
-	Last     bool      // true if this is a last_seq event
-	Seq      int64     // Event sequence number
-	Database *Database // The database that the change occurred in
-	Deleted  bool      // Whether the document was deleted
-	Id       string    // Document id
+	Last    bool   // true if this is a last_seq event
+	Seq     int64  // Event sequence number
+	Deleted bool   // Whether the document was deleted
+	Id      string // Document id
+	Db      string // The database that the change occurred in
 }
 
 type ChangesFeed struct {
 	io.Closer
-	db  *Database
 	dec *json.Decoder
+	db  string
 }
 
 // Open the _changes feed of a database.
@@ -69,14 +69,14 @@ type ChangesFeed struct {
 // updated or deleted.
 //
 // Don't forget to Close() the feed.
-func (db *Database) Changes(options Options) (*ChangesFeed, error) {
+func (c *Client) Changes(db string, options Options) (*ChangesFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
-	path, err := optpath(newopts, db.name, "_changes")
+	path, err := optpath(newopts, db, "_changes")
 	if err != nil {
 		return nil, err
 	}
-	resp, err := db.srv.request("GET", path, nil)
+	resp, err := c.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (db *Database) Changes(options Options) (*ChangesFeed, error) {
 // It is not safe to call this method from more than one goroutine
 // at the same time.
 func (f *ChangesFeed) Next() (event DocEvent, err error) {
-	event.Database = f.db
+	event.Db = f.db
 
 	var json simplejson.Json
 	err = f.dec.Decode(&json)
