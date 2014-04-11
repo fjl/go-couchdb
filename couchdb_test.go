@@ -295,9 +295,9 @@ func TestPut(t *testing.T) {
 		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
 		resp.WriteHeader(StatusCreated)
 		io.WriteString(resp, `{
-			 "id": "doc",
-			 "ok": true,
-			 "rev": "1-619db7ba8551c0de3f3a178775509611"
+			"id": "doc",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
 		}`)
 	})
 
@@ -362,61 +362,6 @@ func TestPutAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(t, "response rev", "2-619db7ba8551c0de3f3a178775509611", newrev)
-}
-
-func TestDbUpdatesFeed(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("GET /_db_updates", func(resp ResponseWriter, req *Request) {
-		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
-		io.WriteString(resp, `{
-			"db_name": "db",
-			"ok": true,
-			"type": "created"
-		}`+"\n")
-	})
-
-	feed, err := c.DbUpdates(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	event, err := feed.Next()
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(t, "event name", "db", event.Name)
-	check(t, "event type", "created", event.Type)
-
-	feed.Close()
-}
-
-func TestChangesFeed(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
-		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
-		io.WriteString(resp, `{
-			"seq": 1,
-			"id": "doc",
-			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
-		}`+"\n")
-		io.WriteString(resp, `{
-			"last_seq": true,
-
-		}`+"\n")
-	})
-
-	feed, err := c.Changes("db", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	event, err := feed.Next()
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(t, "event id", "doc", event.Id)
-	check(t, "event seq", int64(1), event.Seq)
-	check(t, "event database", "db", event.Db)
-
-	feed.Close()
 }
 
 func check(t *testing.T, field string, expected, actual interface{}) {
