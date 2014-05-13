@@ -29,28 +29,44 @@ var (
 
 type Doc map[string]interface{}
 
+// LoadFile creates a document from a single JSON file.
+func LoadFile(file string) (Doc, error) {
+	val, err := loadJSON(file)
+	if err != nil {
+		return nil, err
+	}
+	mapval, ok := val.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("%s does not contain a JSON object", file)
+	}
+	return Doc(mapval), nil
+}
+
 // LoadDirectory transforms a directory structure on disk
 // into a JSON object. All directories become JSON objects
 // whose keys are file and directory names. For regular files,
-// the file extension is stripped from the key.
+// the file extension is stripped from the key. Files with the
+// .json extension are included as JSON.
 //
 // Example tree:
 //
 //     <root>/
-//       a.txt           // contains "text-a"
-//       b/
-//         c.xyz/
-//         d/
-//           e           // contains "text-e"
+//       a.txt           // contains `text-a`
+//       b.json          // contains `{"key": 1}`
+//       c/
+//         d.xyz/
+//         e/
+//           f           // contains `text-f`
 //
 // This would be compiled into the following JSON object:
 //
 //     {
 //       "a": "text-a",
-//       "b": {
-//         "c.xyz": {},
-//         "d": {
-//           "e": "text-e"
+//       "b": {"key": 1},
+//       "c": {
+//         "d.xyz": {},
+//         "e": {
+//           "f": "text-f"
 //         }
 //       }
 //     }
@@ -72,11 +88,11 @@ func LoadDirectory(dirname string, ignores []string) (Doc, error) {
 			stack.obj[name] = val
 			stack = &objstack{obj: val, parent: stack} // push
 		} else {
-			if content, err := readFileString(p); err != nil {
+			content, err := load(p)
+			if err != nil {
 				return err
-			} else {
-				stack.obj[stripExtension(name)] = content
 			}
+			stack.obj[stripExtension(name)] = content
 		}
 		return nil
 	})
@@ -92,35 +108,33 @@ type objstack struct {
 	parent *objstack
 }
 
-// readFileString returns the given file's contents as a string
+func load(filename string) (interface{}, error) {
+	if path.Ext(filename) == ".json" {
+		return loadJSON(filename)
+	} else {
+		return loadString(filename)
+	}
+}
+
+// loadString returns the given file's contents as a string
 // and strips off any surrounding whitespace.
-func readFileString(filename string) (string, error) {
-	data, err := ioutil.ReadFile(filename)
+func loadString(file string) (string, error) {
+	data, err := ioutil.ReadFile(file)
 	if err != nil {
 		return "", err
-	} else {
-		return string(bytes.Trim(data, " \n\r")), nil
 	}
+	return string(bytes.Trim(data, " \n\r")), nil
 }
 
-// stripExtension returns the given filename without its extension.
-func stripExtension(filename string) string {
-	if i := strings.LastIndex(filename, "."); i == -1 {
-		return filename
-	} else {
-		return filename[:i]
-	}
-}
-
-// LoadFile creates a document from a single JSON file.
-func LoadFile(file string) (Doc, error) {
+// loadJSON decodes the content of the given file as JSON.
+func loadJSON(file string) (interface{}, error) {
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
-
-	doc := make(Doc)
-	if err := json.Unmarshal(content, &doc); err != nil {
+	// TODO: use json.Number
+	var val interface{}
+	if err := json.Unmarshal(content, &val); err != nil {
 		if syntaxerr, ok := err.(*json.SyntaxError); ok {
 			line := findLine(content, syntaxerr.Offset)
 			err = fmt.Errorf("JSON syntax error at %v:%v: %v", file, line, err)
@@ -128,7 +142,7 @@ func LoadFile(file string) (Doc, error) {
 		}
 		return nil, fmt.Errorf("JSON unmarshal error in %v: %v", file, err)
 	}
-	return doc, nil
+	return val, nil
 }
 
 // findLine returns the line number for the given offset into data.
@@ -143,6 +157,15 @@ func findLine(data []byte, offset int64) (line int) {
 		}
 	}
 	return
+}
+
+// stripExtension returns the given filename without its extension.
+func stripExtension(filename string) string {
+	if i := strings.LastIndex(filename, "."); i == -1 {
+		return filename
+	} else {
+		return filename[:i]
+	}
 }
 
 // Store updates the given document in a database.

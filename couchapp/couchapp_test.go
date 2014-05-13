@@ -33,6 +33,9 @@ func TestLoadDirectory(t *testing.T) {
 				"map": "function (x) { return x; }",
 			},
 		},
+		"options": map[string]interface{}{
+			"local_seq": true,
+		},
 	}
 	check(t, "doc", expdoc, doc)
 }
