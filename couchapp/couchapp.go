@@ -211,7 +211,7 @@ func StoreAttachments(
 		if att.Body, err = os.Open(p); err != nil {
 			return err
 		}
-		newrev, err = client.PutAttachment(db, docid, newrev, att)
+		newrev, err = client.PutAttachment(db, docid, att, newrev)
 		return err
 	})
 	return

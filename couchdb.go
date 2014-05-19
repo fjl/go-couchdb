@@ -194,10 +194,11 @@ func (c *Client) DeleteDb(dbname string) error {
 
 func (c *Client) AllDbs() (names []string, err error) {
 	resp, err := c.request("GET", "/_all_dbs", nil)
-	if err == nil {
-		err = readBody(resp, &names)
+	if err != nil {
+		return names, err
 	}
-	return
+	err = readBody(resp, &names)
+	return names, err
 }
 
 type DbSecurity struct {
@@ -297,7 +298,7 @@ func responseRev(resp *http.Response, err error) (string, error) {
 	if err != nil {
 		return "", err
 	} else if etag := resp.Header.Get("Etag"); etag == "" {
-		return "", fmt.Errorf("no Etag in response")
+		return "", fmt.Errorf("couchdb: missing Etag header in response")
 	} else {
 		return etag[1 : len(etag)-1], nil
 	}
@@ -322,54 +323,6 @@ func (c *Client) Query(
 		return err
 	}
 	return readBody(resp, &viewResult)
-}
-
-// Attachment represents document attachments.
-type Attachment struct {
-	Name string
-	Type string // the MIME type name of the Body
-	Body io.Reader
-}
-
-// PutAttachment creates or updates a document attachment.
-// To create an attachment on a non-existing document, pass an empty
-// string as the rev.
-func (c *Client) PutAttachment(
-	db, docid, rev string,
-	att *Attachment,
-) (newrev string, err error) {
-	if docid == "" {
-		return "", fmt.Errorf("couchdb.PutAttachment: empty docid")
-	}
-	if att.Name == "" {
-		return "", fmt.Errorf("couchdb.PutAttachment: empty filename")
-	}
-
-	// create the request
-	var p string
-	if rev == "" {
-		p = path(db, docid, att.Name)
-	} else {
-		p, _ = optpath(Options{"rev": rev}, db, docid, att.Name)
-	}
-	req, err := c.newRequest("PUT", p, att.Body)
-	if err != nil {
-		return "", err
-	}
-	if att.Type != "" {
-		req.Header.Add("Content-Type", att.Type)
-	}
-
-	// execute it
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", err
-	} else if resp.StatusCode >= 400 {
-		return "", dbError(resp) // the Body is closed by dbError
-	} else {
-		resp.Body.Close()
-		return responseRev(resp, nil)
-	}
 }
 
 // Errors of this type are returned for API-level errors,
@@ -437,6 +390,9 @@ func dbError(resp *http.Response) error {
 }
 
 func readBody(resp *http.Response, v interface{}) error {
-	defer resp.Body.Close()
-	return json.NewDecoder(resp.Body).Decode(&v)
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		resp.Body.Close()
+		return err
+	}
+	return resp.Body.Close()
 }
