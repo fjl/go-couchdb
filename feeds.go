@@ -20,10 +20,10 @@ import (
 //     }
 //     err = feed.Err()
 //     ...
-type DbUpdatesFeed struct {
+type DBUpdatesFeed struct {
 	Event string `json:"type"`    // "created" | "updated" | "deleted"
 	OK    bool   `json:"ok"`      // Event operation status
-	Db    string `json:"db_name"` // Database name
+	DB    string `json:"db_name"` // Event database name
 
 	end  bool
 	err  error
@@ -36,7 +36,7 @@ type DbUpdatesFeed struct {
 // Pleas note that the "feed" option is currently always set to "continuous".
 //
 // http://docs.couchdb.org/en/latest/api/server/common.html#db-updates
-func (c *Client) DbUpdates(options Options) (*DbUpdatesFeed, error) {
+func (c *Client) DBUpdates(options Options) (*DBUpdatesFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
 	path, err := optpath(newopts, "_db_updates")
@@ -47,7 +47,7 @@ func (c *Client) DbUpdates(options Options) (*DbUpdatesFeed, error) {
 	if err != nil {
 		return nil, err
 	}
-	feed := &DbUpdatesFeed{
+	feed := &DBUpdatesFeed{
 		conn: resp.Body,
 		dec:  json.NewDecoder(resp.Body),
 	}
@@ -56,11 +56,11 @@ func (c *Client) DbUpdates(options Options) (*DbUpdatesFeed, error) {
 
 // Next decodes the next event in a _db_updates feed. It returns false when
 // the feeds end has been reached or an error has occurred.
-func (f *DbUpdatesFeed) Next() bool {
+func (f *DBUpdatesFeed) Next() bool {
 	if f.end {
 		return false
 	}
-	f.Event, f.Db, f.OK = "", "", false
+	f.Event, f.DB, f.OK = "", "", false
 	if f.err = f.dec.Decode(f); f.err != nil {
 		if f.err == io.EOF {
 			f.err = nil
@@ -71,12 +71,12 @@ func (f *DbUpdatesFeed) Next() bool {
 }
 
 // Err returns the last error that occurred during iteration.
-func (f *DbUpdatesFeed) Err() error {
+func (f *DBUpdatesFeed) Err() error {
 	return f.err
 }
 
 // Close terminates the connection of a feed.
-func (f *DbUpdatesFeed) Close() error {
+func (f *DBUpdatesFeed) Close() error {
 	f.end = true
 	return f.conn.Close()
 }
@@ -88,15 +88,15 @@ func (f *DbUpdatesFeed) Close() error {
 //     feed, err := client.Changes("db", nil)
 //     ...
 //     for feed.Next() {
-//	       fmt.Printf("changed: %s", feed.Id)
+//	       fmt.Printf("changed: %s", feed.ID)
 //     }
 //     err = feed.Err()
 //     ...
 type ChangesFeed struct {
-	// Db is the database name. Since all events in a _changes feed
+	// DB is the database. Since all events in a _changes feed
 	// belong to the same database, this field is always equivalent to the
-	// database name from the client.Changes call that created the feed object
-	Db string `json:"-"`
+	// database from the DB.Changes call that created the feed object
+	DB *DB `json:"-"`
 
 	// ID is the document ID of the current event.
 	ID string `json:"id"`
@@ -104,8 +104,9 @@ type ChangesFeed struct {
 	// Deleted is true when the event represents a deleted document.
 	Deleted bool `json:"deleted"`
 
-	// Database update seq of the current event. After all items have been
-	// processed, set to the last_seq value sent by CouchDB.
+	// Seq is the database update sequence number of the current event.
+	// After all items have been processed, set to the last_seq value sent
+	// by CouchDB.
 	Seq int64 `json:"seq"`
 
 	// Changes is the list of the document's leaf revisions.
@@ -138,16 +139,16 @@ type ChangesFeed struct {
 // documentation:
 //
 // http://docs.couchdb.org/en/latest/api/database/changes.html#db-changes
-func (c *Client) Changes(db string, options Options) (*ChangesFeed, error) {
-	path, err := optpath(options, db, "_changes")
+func (db *DB) Changes(options Options) (*ChangesFeed, error) {
+	path, err := optpath(options, db.name, "_changes")
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.request("GET", path, nil)
+	resp, err := db.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
-	feed := &ChangesFeed{Db: db, conn: resp.Body}
+	feed := &ChangesFeed{DB: db, conn: resp.Body}
 
 	switch options["feed"] {
 	case nil, "normal", "longpoll":

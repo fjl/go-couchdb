@@ -7,141 +7,26 @@ package couchdb
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
 type Client struct {
-	prefix string // URL prefix
-	http   *http.Client
-	auth   *auth
-}
-
-type auth struct {
-	username, password string
+	*transport
 }
 
 // NewClient creates a new client object.
 //
 // The second argument can be nil to use the default
 // http.RoundTripper, which should be good enough in most cases.
-func NewClient(url string, transport http.RoundTripper) *Client {
-	return &Client{
-		prefix: strings.TrimRight(url, "/"),
-		http:   &http.Client{Transport: transport},
-	}
-}
-
-// CouchDB query string values are URL-encoded JSON.
-type Options map[string]interface{}
-
-// clone creates a shallow copy of an Options map
-func (opts Options) clone() (result Options) {
-	result = make(Options)
-	for k, v := range opts {
-		result[k] = v
-	}
-	return
-}
-
-// query encodes an Options map as an URL query string
-func (opts Options) encode() (string, error) {
-	buf := new(bytes.Buffer)
-	buf.WriteRune('?')
-	amp := false
-	for k, v := range opts {
-		if amp {
-			buf.WriteRune('&')
-		}
-		buf.WriteString(url.QueryEscape(k))
-		buf.WriteRune('=')
-		if strval, ok := v.(string); ok {
-			buf.WriteString(url.QueryEscape(strval))
-		} else {
-			jsonv, err := json.Marshal(v)
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(url.QueryEscape(string(jsonv)))
-		}
-		amp = true
-	}
-	return buf.String(), nil
-}
-
-func path(segs ...string) (r string) {
-	for _, seg := range segs {
-		r += "/"
-		r += url.QueryEscape(seg)
-	}
-	return
-}
-
-func optpath(opts Options, segs ...string) (r string, err error) {
-	r = path(segs...)
-	if len(opts) > 0 {
-		if os, err := opts.encode(); err == nil {
-			r += os
-		}
-	}
-	return
-}
-
-func (c *Client) newRequest(
-	method, path string,
-	body io.Reader,
-) (*http.Request, error) {
-	req, err := http.NewRequest(method, c.prefix+path, body)
-	if err != nil {
-		return nil, err
-	}
-	if c.auth != nil {
-		req.SetBasicAuth(c.auth.username, c.auth.password)
-	}
-	return req, nil
-}
-
-// request sends an HTTP request to a CouchDB server.
-// The request URL is constructed from the server's
-// prefix and the given path, which may contain an
-// encoded query string.
-//
-// Status codes >= 400 are treated as errors.
-func (c *Client) request(
-	method, path string,
-	body io.Reader,
-) (*http.Response, error) {
-	req, err := c.newRequest(method, path, body)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	} else if resp.StatusCode >= 400 {
-		return nil, dbError(resp) // the Body is closed by dbError
-	} else {
-		return resp, nil
-	}
-}
-
-// closedRequest sends a for-effect HTTP request.
-func (c *Client) closedRequest(
-	method, path string,
-	body io.Reader,
-) (*http.Response, error) {
-	resp, err := c.request(method, path, body)
-	if err == nil {
-		resp.Body.Close()
-	}
-	return resp, err
+func NewClient(url string, rt http.RoundTripper) *Client {
+	return &Client{newTransport(url, rt)}
 }
 
 // URL returns the URL prefix of the server.
-// The prefix does not contain a trailing '/'.
+// The url will not contain a trailing '/'.
 func (c *Client) URL() string {
 	return c.prefix
 }
@@ -165,7 +50,7 @@ func (c *Client) Login(username, password string) error {
 	if resp, err := c.http.Do(req); err != nil {
 		return err
 	} else if resp.StatusCode >= 400 {
-		return dbError(resp)
+		return parseError(resp)
 	} else {
 		c.auth = &auth{username, password}
 		resp.Body.Close()
@@ -179,20 +64,23 @@ func (c *Client) Logout() error {
 	return nil
 }
 
-// CreateDb creates a new database.
-// The request will fail with status "412 Precondition Failed" if
-// the database already exists.
-func (c *Client) CreateDb(dbname string) error {
-	_, err := c.closedRequest("PUT", path(dbname), nil)
+// CreateDB creates a new database.
+// A valid DB object is returned in all cases, even if the request fails.
+// The request will fail with status "412 Precondition Failed" if the database
+// already exists.
+func (c *Client) CreateDB(name string) (*DB, error) {
+	if _, err := c.closedRequest("PUT", path(name), nil); err != nil {
+		return c.DB(name), err
+	}
+	return c.DB(name), nil
+}
+
+func (c *Client) DeleteDB(name string) error {
+	_, err := c.closedRequest("DELETE", path(name), nil)
 	return err
 }
 
-func (c *Client) DeleteDb(dbname string) error {
-	_, err := c.closedRequest("DELETE", path(dbname), nil)
-	return err
-}
-
-func (c *Client) AllDbs() (names []string, err error) {
+func (c *Client) AllDBs() (names []string, err error) {
 	resp, err := c.request("GET", "/_all_dbs", nil)
 	if err != nil {
 		return names, err
@@ -201,21 +89,82 @@ func (c *Client) AllDbs() (names []string, err error) {
 	return names, err
 }
 
-type DbSecurity struct {
-	Admins  DbMembers `json:"admins"`
-	Members DbMembers `json:"members"`
+type DB struct {
+	*transport
+	name string
 }
 
-type DbMembers struct {
+// DB creates a database object.
+// The database inherits the authentication and http.RoundTripper
+// of the client. The database's actual existence is not verified.
+func (c *Client) DB(name string) *DB {
+	return &DB{c.transport, name}
+}
+
+func (db *DB) Name() string {
+	return db.name
+}
+
+// Get retrieves a document from the given database.
+// The document is unmarshalled into the given object.
+// Some fields (like _conflicts) will only be returned if the
+// options require it. Please refer to the CouchDB HTTP API documentation
+// for more information.
+//
+// http://docs.couchdb.org/en/latest/api/document/common.html?highlight=doc#get--db-docid
+func (db *DB) Get(id string, doc interface{}, opts Options) error {
+	path, err := optpath(opts, db.name, id)
+	if err != nil {
+		return err
+	}
+	resp, err := db.request("GET", path, nil)
+	if err != nil {
+		return err
+	}
+	return readBody(resp, &doc)
+}
+
+// Rev fetches the current revision of a document.
+// It is faster than an equivalent Get request because no body
+// has to be parsed.
+func (db *DB) Rev(id string) (string, error) {
+	return responseRev(db.closedRequest("HEAD", path(db.name, id), nil))
+}
+
+// Put stores a document into the given database.
+func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err error) {
+	path := path(db.name, id)
+	if rev != "" {
+		path += "?rev=" + url.QueryEscape(rev)
+	}
+	if json, err := json.Marshal(doc); err != nil {
+		return "", err
+	} else {
+		b := bytes.NewReader(json)
+		return responseRev(db.closedRequest("PUT", path, b))
+	}
+}
+
+// Delete marks a document revision as deleted.
+func (db *DB) Delete(id, rev string) (newrev string, err error) {
+	path, _ := optpath(Options{"rev": rev}, db.name, id)
+	return responseRev(db.closedRequest("DELETE", path, nil))
+}
+
+type Security struct {
+	Admins  Members `json:"admins"`
+	Members Members `json:"members"`
+}
+
+type Members struct {
 	Names []string `json:"names,omitempty"`
 	Roles []string `json:"roles,omitempty"`
 }
 
-// Security retrieves the database security object, which defines its
-// access control rules.
-func (c *Client) Security(db string) (*DbSecurity, error) {
-	secobj := new(DbSecurity)
-	resp, err := c.request("GET", path(db, "_security"), nil)
+// GetSecurity retrieves the database security object.
+func (db *DB) Security() (*Security, error) {
+	secobj := new(Security)
+	resp, err := db.request("GET", path(db.name, "_security"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -229,170 +178,35 @@ func (c *Client) Security(db string) (*DbSecurity, error) {
 	return secobj, nil
 }
 
-// SetSecurity sets the database security object.
-func (c *Client) SetSecurity(db string, secobj *DbSecurity) error {
+// PutSecurity sets the database security object.
+func (db *DB) PutSecurity(secobj *Security) error {
 	json, _ := json.Marshal(secobj)
 	body := bytes.NewReader(json)
-	_, err := c.request("PUT", path(db, "_security"), body)
+	_, err := db.request("PUT", path(db.name, "_security"), body)
 	return err
 }
 
-// Get retrieves a document from the given database.
-// The document is unmarshalled into the given object.
-// Some fields (like _conflicts) will only be returned if the
-// options require it. Please refer to the CouchDB HTTP API documentation
-// for more information.
-func (c *Client) Get(db, id string, opts Options, doc interface{}) error {
-	path, err := optpath(opts, db, id)
-	if err != nil {
-		return err
-	}
-	resp, err := c.request("GET", path, nil)
-	if err != nil {
-		return err
-	}
-	return readBody(resp, &doc)
-}
-
-// Rev fetches the current revision of a document.
-// It is faster than an equivalent Get request because no body has to parsed.
-func (c *Client) Rev(db, id string) (string, error) {
-	return responseRev(c.closedRequest("HEAD", path(db, id), nil))
-}
-
-// Put stores a document into the given database.
-// If the document is already present in the database, the
-// marshalled JSON representation of doc must include a _rev member
-// or the request will fail with "409 Conflict".
-func (c *Client) Put(db, id string, doc interface{}) (string, error) {
-	if json, err := json.Marshal(doc); err != nil {
-		return "", err
-	} else {
-		b := bytes.NewReader(json)
-		return responseRev(c.closedRequest("PUT", path(db, id), b))
-	}
-}
-
-// PutRev stores a document into the given database.
-// In contrast to the Put method, the current revision must be
-// given explicitly, which can be useful if your document representation
-// does not include a _rev member.
-func (c *Client) PutRev(db, id, rev string, doc interface{}) (string, error) {
-	if json, err := json.Marshal(doc); err != nil {
-		return "", err
-	} else {
-		path, _ := optpath(Options{"rev": rev}, db, id)
-		b := bytes.NewReader(json)
-		return responseRev(c.closedRequest("PUT", path, b))
-	}
-}
-
-// Delete marks a document revision as deleted.
-func (c *Client) Delete(db, id, rev string) (string, error) {
-	path, _ := optpath(Options{"rev": rev}, db, id)
-	return responseRev(c.closedRequest("DELETE", path, nil))
-}
-
-// responseRev returns the unquoted Etag of a response.
-func responseRev(resp *http.Response, err error) (string, error) {
-	if err != nil {
-		return "", err
-	} else if etag := resp.Header.Get("Etag"); etag == "" {
-		return "", fmt.Errorf("couchdb: missing Etag header in response")
-	} else {
-		return etag[1 : len(etag)-1], nil
-	}
-}
-
-// Query retrieves the contents of a view.
-// The output of the query is unmarshalled into the given viewResult.
+// View invokes a view.
+// The ddoc parameter must be the full name of the design document
+// containing the view definition, including the _design/ prefix.
+//
+// The output of the query is unmarshalled into the given result.
 // The format of the result depends on the options. Please
 // refer to the CouchDB HTTP API documentation for all the possible
 // options that can be set.
-func (c *Client) Query(
-	db, ddoc, view string,
-	opts Options,
-	viewResult interface{},
-) error {
-	path, err := optpath(opts, db, "_design", ddoc, "_view", view)
+//
+// http://docs.couchdb.org/en/latest/api/ddoc/views.html
+func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
+	if !strings.HasPrefix(ddoc, "_design/") {
+		return errors.New("couchdb.View: design doc name must start with _design/")
+	}
+	path, err := optpath(opts, db.name, ddoc, "_view", view)
 	if err != nil {
 		return err
 	}
-	resp, err := c.request("GET", path, nil)
+	resp, err := db.request("GET", path, nil)
 	if err != nil {
 		return err
 	}
-	return readBody(resp, &viewResult)
-}
-
-// Errors of this type are returned for API-level errors,
-// i.e. for all errors that are reported by CouchDB as
-//    {"error": <ErrorCode>, "reason": <Reason>}
-type DatabaseError struct {
-	Method     string // HTTP method of the request
-	URL        string // HTTP URL of the request
-	StatusCode int    // HTTP status code of the response
-
-	// These two fields will be empty for HEAD requests.
-	ErrorCode string // Error reason provided by CouchDB
-	Reason    string // Error message provided by CouchDB
-}
-
-func (e DatabaseError) Error() string {
-	if e.ErrorCode == "" {
-		return fmt.Sprintf("%v %v: %v", e.Method, e.URL, e.StatusCode)
-	} else {
-		return fmt.Sprintf("%v %v: (%v) %v: %v",
-			e.Method, e.URL, e.StatusCode, e.ErrorCode, e.Reason)
-	}
-}
-
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 404. This is useful
-// for conditional creation of databases and documents.
-func NotFound(err error) bool {
-	return ErrorStatus(err, http.StatusNotFound)
-}
-
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 401.
-func Unauthorized(err error) bool {
-	return ErrorStatus(err, http.StatusUnauthorized)
-}
-
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 409.
-func Conflict(err error) bool {
-	return ErrorStatus(err, http.StatusConflict)
-}
-
-// ErrorStatus checks whether the given error
-// is a DatabaseError with a matching statusCode.
-func ErrorStatus(err error, statusCode int) bool {
-	dberr, ok := err.(DatabaseError)
-	return ok && dberr.StatusCode == statusCode
-}
-
-func dbError(resp *http.Response) error {
-	var reply struct{ Error, Reason string }
-	if resp.Request.Method != "HEAD" {
-		if err := readBody(resp, &reply); err != nil {
-			return fmt.Errorf("couldn't decode CouchDB error: %v", err)
-		}
-	}
-	return DatabaseError{
-		Method:     resp.Request.Method,
-		URL:        resp.Request.URL.String(),
-		StatusCode: resp.StatusCode,
-		ErrorCode:  reply.Error,
-		Reason:     reply.Reason,
-	}
-}
-
-func readBody(resp *http.Response, v interface{}) error {
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		resp.Body.Close()
-		return err
-	}
-	return resp.Body.Close()
+	return readBody(resp, &result)
 }

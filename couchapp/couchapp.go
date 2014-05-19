@@ -171,12 +171,11 @@ func stripExtension(filename string) string {
 // Store updates the given document in a database.
 // If the document exists, it will be overwritten.
 // The new revision of the document is returned.
-func Store(c *couchdb.Client, db, docid string, doc Doc) (string, error) {
-	rev, err := c.Rev(db, docid)
-	if err == nil {
-		return c.PutRev(db, docid, rev, doc)
+func Store(db *couchdb.DB, docid string, doc Doc) (string, error) {
+	if rev, err := db.Rev(docid); err == nil {
+		return db.Put(docid, doc, rev)
 	} else if couchdb.NotFound(err) {
-		return c.Put(db, docid, doc)
+		return db.Put(docid, doc, "")
 	} else {
 		return "", err
 	}
@@ -193,9 +192,8 @@ func Store(c *couchdb.Client, db, docid string, doc Doc) (string, error) {
 //
 // A correct revision id is returned in all cases, even if there was an error.
 func StoreAttachments(
-	client *couchdb.Client,
-	db, docid, rev string,
-	dir string,
+	db *couchdb.DB,
+	docid, rev, dir string,
 	ignores []string,
 ) (newrev string, err error) {
 	newrev = rev
@@ -211,7 +209,7 @@ func StoreAttachments(
 		if att.Body, err = os.Open(p); err != nil {
 			return err
 		}
-		newrev, err = client.PutAttachment(db, docid, att, newrev)
+		newrev, err = db.PutAttachment(docid, att, newrev)
 		return err
 	})
 	return

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDbUpdatesFeed(t *testing.T) {
+func TestDBUpdatesFeed(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /_db_updates", func(resp ResponseWriter, req *Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
@@ -23,7 +23,7 @@ func TestDbUpdatesFeed(t *testing.T) {
 		}`+"\n")
 	})
 
-	feed, err := c.DbUpdates(nil)
+	feed, err := c.DBUpdates(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestDbUpdatesFeed(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
+	check(t, "feed.DB", "db", feed.DB)
 	check(t, "feed.Event", "created", feed.Event)
 	check(t, "feed.OK", true, feed.OK)
 
@@ -40,7 +40,7 @@ func TestDbUpdatesFeed(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db2", feed.Db)
+	check(t, "feed.DB", "db2", feed.DB)
 	check(t, "feed.Event", "deleted", feed.Event)
 	check(t, "feed.OK", false, feed.OK)
 
@@ -48,7 +48,7 @@ func TestDbUpdatesFeed(t *testing.T) {
 	check(t, "feed.Next()", false, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "", feed.Db)
+	check(t, "feed.DB", "", feed.DB)
 	check(t, "feed.Event", "", feed.Event)
 	check(t, "feed.OK", false, feed.OK)
 
@@ -79,7 +79,7 @@ func TestChangesFeedPoll(t *testing.T) {
 		}`)
 	})
 
-	feed, err := c.Changes("db", nil)
+	feed, err := c.DB("db").Changes(nil)
 	if err != nil {
 		t.Fatalf("client.Changes error: %v", err)
 	}
@@ -90,7 +90,6 @@ func TestChangesFeedPoll(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "doc", feed.ID)
 	check(t, "feed.Seq", int64(1), feed.Seq)
 	check(t, "feed.Deleted", true, feed.Deleted)
@@ -99,7 +98,6 @@ func TestChangesFeedPoll(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "doc", feed.ID)
 	check(t, "feed.Seq", int64(2), feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)
@@ -108,7 +106,6 @@ func TestChangesFeedPoll(t *testing.T) {
 	check(t, "feed.Next()", false, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "", feed.ID)
 	check(t, "feed.Seq", int64(99), feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)
@@ -139,7 +136,7 @@ func TestChangesFeedCont(t *testing.T) {
 		}`+"\n")
 	})
 
-	feed, err := c.Changes("db", couchdb.Options{"feed": "continuous"})
+	feed, err := c.DB("db").Changes(couchdb.Options{"feed": "continuous"})
 	if err != nil {
 		t.Fatalf("client.Changes error: %v", err)
 	}
@@ -150,7 +147,6 @@ func TestChangesFeedCont(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "doc", feed.ID)
 	check(t, "feed.Seq", int64(1), feed.Seq)
 	check(t, "feed.Deleted", true, feed.Deleted)
@@ -159,7 +155,6 @@ func TestChangesFeedCont(t *testing.T) {
 	check(t, "feed.Next()", true, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "doc", feed.ID)
 	check(t, "feed.Seq", int64(2), feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)
@@ -168,7 +163,6 @@ func TestChangesFeedCont(t *testing.T) {
 	check(t, "feed.Next()", false, feed.Next())
 	check(t, "feed.Err()", error(nil), feed.Err())
 
-	check(t, "feed.Db", "db", feed.Db)
 	check(t, "feed.ID", "", feed.ID)
 	check(t, "feed.Seq", int64(99), feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)

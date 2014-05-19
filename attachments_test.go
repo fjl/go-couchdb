@@ -16,27 +16,7 @@ var (
 	md5bytes, _ = base64.StdEncoding.DecodeString(md5string)
 )
 
-func TestAttachmentInfo(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("HEAD /db/doc/attachment/1",
-		func(resp ResponseWriter, req *Request) {
-			resp.Header().Set("content-md5", "2mGd+/VXL8dJsUlrD//Xag==")
-			resp.Header().Set("content-type", "text/plain")
-			resp.WriteHeader(StatusOK)
-		})
-
-	att, err := c.AttachmentInfo("db", "doc", "attachment/1", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	check(t, "att.Name", "attachment/1", att.Name)
-	check(t, "att.Type", "text/plain", att.Type)
-	check(t, "att.MD5", md5bytes, att.MD5)
-	check(t, "att.Body", nil, att.Body)
-}
-
-func TestGetAttachment(t *testing.T) {
+func TestAttachment(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/doc/attachment/1",
 		func(resp ResponseWriter, req *Request) {
@@ -45,7 +25,7 @@ func TestGetAttachment(t *testing.T) {
 			io.WriteString(resp, "the content")
 		})
 
-	att, err := c.GetAttachment("db", "doc", "attachment/1", "")
+	att, err := c.DB("db").Attachment("doc", "attachment/1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +38,26 @@ func TestGetAttachment(t *testing.T) {
 	check(t, "att.Type", "text/plain", att.Type)
 	check(t, "att.MD5", md5bytes, att.MD5)
 	check(t, "att.Body content", "the content", string(body))
+}
+
+func TestAttachmentMeta(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("HEAD /db/doc/attachment/1",
+		func(resp ResponseWriter, req *Request) {
+			resp.Header().Set("content-md5", "2mGd+/VXL8dJsUlrD//Xag==")
+			resp.Header().Set("content-type", "text/plain")
+			resp.WriteHeader(StatusOK)
+		})
+
+	att, err := c.DB("db").AttachmentMeta("doc", "attachment/1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check(t, "att.Name", "attachment/1", att.Name)
+	check(t, "att.Type", "text/plain", att.Type)
+	check(t, "att.MD5", md5bytes, att.MD5)
+	check(t, "att.Body", nil, att.Body)
 }
 
 func TestPutAttachment(t *testing.T) {
@@ -89,7 +89,7 @@ func TestPutAttachment(t *testing.T) {
 		Type: "text/plain",
 		Body: bytes.NewBufferString("the content"),
 	}
-	newrev, err := c.PutAttachment("db", "doc", att, "1-619db7ba8551c0de3f3a178775509611")
+	newrev, err := c.DB("db").PutAttachment("doc", att, "1-619db7ba8551c0de3f3a178775509611")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestDeleteAttachment(t *testing.T) {
 			})
 		})
 
-	newrev, err := c.DeleteAttachment("db", "doc", "attachment/1", "1-619db7ba8551c0de3f3a178775509611")
+	newrev, err := c.DB("db").DeleteAttachment("doc", "attachment/1", "1-619db7ba8551c0de3f3a178775509611")
 	if err != nil {
 		t.Fatal(err)
 	}

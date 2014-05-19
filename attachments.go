@@ -16,27 +16,11 @@ type Attachment struct {
 	Body io.Reader // The body itself
 }
 
-// AttachmentInfo requests attachment metadata.
-// The returned attachment's Body is always nil.
-func (c *Client) AttachmentInfo(db, docid, name, rev string) (*Attachment, error) {
-	if docid == "" {
-		return nil, fmt.Errorf("couchdb.GetAttachment: empty docid")
-	}
-	if name == "" {
-		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
-	}
-
-	resp, err := c.closedRequest("HEAD", attpath(db, docid, name, rev), nil)
-	if err != nil {
-		return nil, err
-	}
-	return attFromHeaders(name, resp)
-}
-
-// GetAttachment retrieves an attachment.
+// Attachment retrieves an attachment.
+// The rev argument can be left empty to retrieve the latest revision.
 // The caller is responsible for closing the attachment's Body if
-// the error is nil.
-func (c *Client) GetAttachment(db, docid, name, rev string) (*Attachment, error) {
+// the returned error is nil.
+func (db *DB) Attachment(docid, name, rev string) (*Attachment, error) {
 	if docid == "" {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty docid")
 	}
@@ -44,7 +28,7 @@ func (c *Client) GetAttachment(db, docid, name, rev string) (*Attachment, error)
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	resp, err := c.request("GET", attpath(db, docid, name, rev), nil)
+	resp, err := db.request("GET", attpath(db.name, docid, name, rev), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +41,28 @@ func (c *Client) GetAttachment(db, docid, name, rev string) (*Attachment, error)
 	return att, nil
 }
 
+// AttachmentMeta requests attachment metadata.
+// The rev argument can be left empty to retrieve the latest revision.
+// The returned attachment's Body is always nil.
+func (db *DB) AttachmentMeta(docid, name, rev string) (*Attachment, error) {
+	if docid == "" {
+		return nil, fmt.Errorf("couchdb.GetAttachment: empty docid")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
+	}
+
+	path := attpath(db.name, docid, name, rev)
+	resp, err := db.closedRequest("HEAD", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	return attFromHeaders(name, resp)
+}
+
 // PutAttachment creates or updates an attachment.
-// To create an attachment on a non-existing document, pass an empty
-// string as the rev.
-func (c *Client) PutAttachment(db, docid string, att *Attachment, rev string) (newrev string, err error) {
+// To create an attachment on a non-existing document, pass an empty rev.
+func (db *DB) PutAttachment(docid string, att *Attachment, rev string) (newrev string, err error) {
 	if docid == "" {
 		return rev, fmt.Errorf("couchdb.PutAttachment: empty docid")
 	}
@@ -71,25 +73,27 @@ func (c *Client) PutAttachment(db, docid string, att *Attachment, rev string) (n
 		return rev, fmt.Errorf("couchdb.PutAttachment: nil attachment Body")
 	}
 
-	req, err := c.newRequest("PUT", attpath(db, docid, att.Name, rev), att.Body)
+	path := attpath(db.name, docid, att.Name, rev)
+	req, err := db.newRequest("PUT", path, att.Body)
 	if err != nil {
 		return rev, err
 	}
 	req.Header.Set("content-type", att.Type)
 
-	resp, err := c.http.Do(req)
+	resp, err := db.http.Do(req)
 	if err != nil {
 		return rev, err
 	}
 	var result struct{ Rev string }
 	if err := readBody(resp, &result); err != nil {
+		// TODO: close body if it implements io.ReadCloser
 		return rev, fmt.Errorf("couchdb.PutAttachment: couldn't decode rev: %v", err)
 	}
 	return result.Rev, nil
 }
 
 // DeleteAttachment removes an attachment.
-func (c *Client) DeleteAttachment(db, docid, name, rev string) (newrev string, err error) {
+func (db *DB) DeleteAttachment(docid, name, rev string) (newrev string, err error) {
 	if docid == "" {
 		return rev, fmt.Errorf("couchdb.PutAttachment: empty docid")
 	}
@@ -97,7 +101,8 @@ func (c *Client) DeleteAttachment(db, docid, name, rev string) (newrev string, e
 		return rev, fmt.Errorf("couchdb.PutAttachment: empty name")
 	}
 
-	resp, err := c.closedRequest("DELETE", attpath(db, docid, name, rev), nil)
+	path := attpath(db.name, docid, name, rev)
+	resp, err := db.closedRequest("DELETE", path, nil)
 	return responseRev(resp, err)
 }
 
