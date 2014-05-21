@@ -34,7 +34,9 @@ type proxyauth struct {
 func ProxyAuth(username string, roles []string, secret string) Auth {
 	pa := &proxyauth{username, strings.Join(roles, ","), ""}
 	if secret != "" {
-		pa.tok = fmt.Sprintf("%x", sha1.Sum([]byte(secret+username)))
+		hash := sha1.New()
+		hash.Write([]byte(secret + username))
+		pa.tok = fmt.Sprintf("%x", hash.Sum(nil))
 	}
 	return pa
 }
