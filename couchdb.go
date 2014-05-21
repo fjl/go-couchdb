@@ -38,30 +38,12 @@ func (c *Client) Ping() error {
 	return err
 }
 
-// Login initiates a user session.
-// Any requests made after a successful call to Login will be authenticated.
-func (c *Client) Login(username, password string) error {
-	req, err := c.newRequest("GET", "/_session", nil)
-	if err != nil {
-		return err
-	}
-
-	req.SetBasicAuth(username, password)
-	if resp, err := c.http.Do(req); err != nil {
-		return err
-	} else if resp.StatusCode >= 400 {
-		return parseError(resp)
-	} else {
-		c.auth = &auth{username, password}
-		resp.Body.Close()
-		return nil
-	}
-}
-
-// Logout deletes the active session.
-func (c *Client) Logout() error {
-	c.auth = nil
-	return nil
+// SetAuth sets the authentication mechanism used by the client.
+// Use SetAuth(nil) to unset any mechanism that might be in use.
+// In order to verify the credentials against the server, issue any request
+// after the call the SetAuth.
+func (c *Client) SetAuth(a Auth) {
+	c.transport.setAuth(a)
 }
 
 // CreateDB creates a new database.

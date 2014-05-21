@@ -77,63 +77,6 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func TestLoginSuccess(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("GET /_session", func(resp ResponseWriter, req *Request) {
-		auth := req.Header.Get("Authorization")
-		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
-
-		io.WriteString(resp, `{
-			"ok": true,
-			"userCtx": {"name":"user","roles":["_admin"]},
-			"info":{
-				"authentication_db": "_users",
-				"authentication_handlers": ["oauth","cookie","default"],
-				"authenticated": "default"
-			}
-		}`)
-	})
-	if err := c.Login("user", "password"); err != nil {
-		t.Fatal(err)
-	}
-
-	c.ClearHandlers()
-	c.Handle("HEAD /", func(resp ResponseWriter, req *Request) {
-		auth := req.Header.Get("Authorization")
-		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
-	})
-	if err := c.Ping(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLoginFailure(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("GET /_session", func(resp ResponseWriter, req *Request) {
-		auth := req.Header.Get("Authorization")
-		check(t, "basic auth header", "Basic dXNlcjpwYXNzd29yZA==", auth)
-
-		resp.WriteHeader(StatusUnauthorized)
-		io.WriteString(resp, `{
-			"error":  "unauthorized",
-			"reason": "Name or password is incorrect."
-		}`)
-	})
-	err := c.Login("user", "password")
-	check(t, "Unauthorized(err)", true, couchdb.Unauthorized(err))
-
-	// verify that auth information is not persisted in the server
-	// if the login failed
-	c.ClearHandlers()
-	c.Handle("HEAD /", func(resp ResponseWriter, req *Request) {
-		auth := req.Header.Get("Authorization")
-		check(t, "basic auth header", "", auth)
-	})
-	if err := c.Ping(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestCreateDB(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("PUT /db", func(resp ResponseWriter, req *Request) {})

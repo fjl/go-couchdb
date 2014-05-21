@@ -8,24 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
-
-type transport struct {
-	prefix string // URL prefix
-	http   *http.Client
-	auth   *auth
-}
-
-type auth struct {
-	username, password string
-}
-
-func newTransport(prefix string, rt http.RoundTripper) *transport {
-	return &transport{
-		prefix: strings.TrimRight(prefix, "/"),
-		http:   &http.Client{Transport: rt},
-	}
-}
 
 // Options represents CouchDB query string parameters.
 type Options map[string]interface{}
@@ -64,13 +48,35 @@ func (opts Options) encode() (string, error) {
 	return buf.String(), nil
 }
 
+type transport struct {
+	prefix string // URL prefix
+	http   *http.Client
+	mu     sync.RWMutex
+	auth   Auth
+}
+
+func newTransport(prefix string, rt http.RoundTripper) *transport {
+	return &transport{
+		prefix: strings.TrimRight(prefix, "/"),
+		http:   &http.Client{Transport: rt},
+	}
+}
+
+func (t *transport) setAuth(a Auth) {
+	t.mu.Lock()
+	t.auth = a
+	t.mu.Unlock()
+}
+
 func (t *transport) newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, t.prefix+path, body)
 	if err != nil {
 		return nil, err
 	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	if t.auth != nil {
-		req.SetBasicAuth(t.auth.username, t.auth.password)
+		t.auth.AddAuth(req)
 	}
 	return req, nil
 }
