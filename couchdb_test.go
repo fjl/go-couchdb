@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	. "net/http"
+	"net/url"
 	"regexp"
 	"testing"
 )
@@ -201,6 +202,33 @@ func TestPut(t *testing.T) {
 	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
 
+func TestPutWithRev(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("PUT /db/doc", func(resp ResponseWriter, req *Request) {
+		check(t, "request query string",
+			"rev=1-619db7ba8551c0de3f3a178775509611",
+			req.URL.RawQuery)
+
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(StatusCreated)
+		io.WriteString(resp, `{
+			"id": "doc",
+			"ok": true,
+			"rev": "2-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	doc := &testDocument{Field: 999}
+	rev, err := c.DB("db").Put("doc", doc, "1-619db7ba8551c0de3f3a178775509611")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "returned rev", "2-619db7ba8551c0de3f3a178775509611", rev)
+}
+
 func TestDelete(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("DELETE /db/doc", func(resp ResponseWriter, req *Request) {
@@ -223,4 +251,70 @@ func TestDelete(t *testing.T) {
 	} else {
 		check(t, "returned rev", "2-619db7ba8551c0de3f3a178775509611", rev)
 	}
+}
+
+type testviewResult struct {
+	TotalRows int   `json:"total_rows"`
+	Offset    int   `json:"offset"`
+	Rows      []row `json:"rows"`
+}
+type row struct {
+	Id, Key string
+	Value   int
+}
+
+func TestView(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/_design/test/_view/testview",
+		func(resp ResponseWriter, req *Request) {
+			expected := url.Values{
+				"offset": {"5"},
+				"limit":  {"100"},
+				"reduce": {"false"},
+			}
+			check(t, "request query values", expected, req.URL.Query())
+
+			io.WriteString(resp, `{
+				"offset": 5,
+				"rows": [
+					{
+						"id": "SpaghettiWithMeatballs",
+						"key": "meatballs",
+						"value": 1
+					},
+					{
+						"id": "SpaghettiWithMeatballs",
+						"key": "spaghetti",
+						"value": 1
+					},
+					{
+						"id": "SpaghettiWithMeatballs",
+						"key": "tomato sauce",
+						"value": 1
+					}
+				],
+				"total_rows": 3
+			}`)
+		})
+
+	var result testviewResult
+	err := c.DB("db").View("_design/test", "testview", &result, couchdb.Options{
+		"offset": 5,
+		"limit":  100,
+		"reduce": false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := testviewResult{
+		TotalRows: 3,
+		Offset:    5,
+		Rows: []row{
+			{"SpaghettiWithMeatballs", "meatballs", 1},
+			{"SpaghettiWithMeatballs", "spaghetti", 1},
+			{"SpaghettiWithMeatballs", "tomato sauce", 1},
+		},
+	}
+	check(t, "result", expected, result)
 }
