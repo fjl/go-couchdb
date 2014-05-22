@@ -44,7 +44,7 @@ func TestProxyAuthWithToken(t *testing.T) {
 	expected := http.Header{
 		"X-Auth-Couchdb-Username": {"user"},
 		"X-Auth-Couchdb-Roles":    {"role1,role2"},
-		"X-Auth-Couchdb-Token":    {"0eefaf44991ac21b04262ada13c1ec5f01b71596"},
+		"X-Auth-Couchdb-Token":    {"027da48c8c642ca4c58eb982eec81915179e77a3"},
 	}
 	check(t, "req headers", expected, req.Header)
 }

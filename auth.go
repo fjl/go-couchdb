@@ -1,9 +1,11 @@
 package couchdb
 
 import (
+	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -34,9 +36,9 @@ type proxyauth struct {
 func ProxyAuth(username string, roles []string, secret string) Auth {
 	pa := &proxyauth{username, strings.Join(roles, ","), ""}
 	if secret != "" {
-		hash := sha1.New()
-		hash.Write([]byte(secret + username))
-		pa.tok = fmt.Sprintf("%x", hash.Sum(nil))
+		mac := hmac.New(sha1.New, []byte(secret))
+		io.WriteString(mac, username)
+		pa.tok = fmt.Sprintf("%x", mac.Sum(nil))
 	}
 	return pa
 }
