@@ -288,7 +288,7 @@ func TestView(t *testing.T) {
 		})
 
 	type row struct {
-		Id, Key string
+		ID, Key string
 		Value   int
 	}
 	type testviewResult struct {

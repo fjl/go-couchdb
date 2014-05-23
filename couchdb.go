@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+// Client represents a remote CouchDB server.
 type Client struct {
 	*transport
 }
@@ -47,9 +48,9 @@ func (c *Client) SetAuth(a Auth) {
 }
 
 // CreateDB creates a new database.
-// A valid DB object is returned in all cases, even if the request fails.
 // The request will fail with status "412 Precondition Failed" if the database
-// already exists.
+// already exists. A valid DB object is returned in all cases, even if the
+// request fails.
 func (c *Client) CreateDB(name string) (*DB, error) {
 	if _, err := c.closedRequest("PUT", path(name), nil); err != nil {
 		return c.DB(name), err
@@ -57,11 +58,13 @@ func (c *Client) CreateDB(name string) (*DB, error) {
 	return c.DB(name), nil
 }
 
+// DeleteDB deletes an existing database.
 func (c *Client) DeleteDB(name string) error {
 	_, err := c.closedRequest("DELETE", path(name), nil)
 	return err
 }
 
+// AllDBs returns the names of all existing databases.
 func (c *Client) AllDBs() (names []string, err error) {
 	resp, err := c.request("GET", "/_all_dbs", nil)
 	if err != nil {
@@ -71,6 +74,7 @@ func (c *Client) AllDBs() (names []string, err error) {
 	return names, err
 }
 
+// DB represents a remote CouchDB database.
 type DB struct {
 	*transport
 	name string
@@ -83,6 +87,7 @@ func (c *Client) DB(name string) *DB {
 	return &DB{c.transport, name}
 }
 
+// Name returns the name of a database.
 func (db *DB) Name() string {
 	return db.name
 }
@@ -119,12 +124,13 @@ func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err er
 	if rev != "" {
 		path += "?rev=" + url.QueryEscape(rev)
 	}
-	if json, err := json.Marshal(doc); err != nil {
+	// TODO: make it possible to stream encoder output somehow
+	json, err := json.Marshal(doc)
+	if err != nil {
 		return "", err
-	} else {
-		b := bytes.NewReader(json)
-		return responseRev(db.closedRequest("PUT", path, b))
 	}
+	b := bytes.NewReader(json)
+	return responseRev(db.closedRequest("PUT", path, b))
 }
 
 // Delete marks a document revision as deleted.
@@ -133,17 +139,19 @@ func (db *DB) Delete(id, rev string) (newrev string, err error) {
 	return responseRev(db.closedRequest("DELETE", path, nil))
 }
 
+// Security represents database security objects.
 type Security struct {
 	Admins  Members `json:"admins"`
 	Members Members `json:"members"`
 }
 
+// Members represents member lists in database security objects.
 type Members struct {
 	Names []string `json:"names,omitempty"`
 	Roles []string `json:"roles,omitempty"`
 }
 
-// GetSecurity retrieves the database security object.
+// Security retrieves the security object of a database.
 func (db *DB) Security() (*Security, error) {
 	secobj := new(Security)
 	resp, err := db.request("GET", path(db.name, "_security"), nil)

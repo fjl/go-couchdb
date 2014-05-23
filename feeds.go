@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// DbUpdatesFeed is an iterator for the _db_updates feed.
+// DBUpdatesFeed is an iterator for the _db_updates feed.
 // This feed receives an event whenever any database is created, updated
 // or deleted. On each call to the Next method, the event fields are updated
 // for the current event.
@@ -31,7 +31,7 @@ type DBUpdatesFeed struct {
 	dec  *json.Decoder
 }
 
-// Open the _db_updates feed.
+// DBUpdates opens the _db_updates feed.
 // For the possible options, please see the CouchDB documentation.
 // Pleas note that the "feed" option is currently always set to "continuous".
 //
@@ -124,7 +124,7 @@ type ChangesFeed struct {
 	parser func() error
 }
 
-// Open the _changes feed of a database. This feed receives an event
+// Changes opens the _changes feed of a database. This feed receives an event
 // whenever a document is created, updated or deleted.
 //
 // The implementation supports both poll-style and continuous feeds.

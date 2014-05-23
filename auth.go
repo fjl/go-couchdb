@@ -13,12 +13,13 @@ import (
 // Auth is implemented by HTTP authentication mechanisms.
 type Auth interface {
 	// AddAuth should add authentication information (e.g. headers)
-	// to the given http request.
+	// to the given HTTP request.
 	AddAuth(*http.Request)
 }
 
 type basicauth string
 
+// BasicAuth returns an Auth that performs HTTP Basic Authentication.
 func BasicAuth(username, password string) Auth {
 	auth := []byte(username + ":" + password)
 	hdr := "Basic " + base64.StdEncoding.EncodeToString(auth)
@@ -33,6 +34,11 @@ type proxyauth struct {
 	username, roles, tok string
 }
 
+// ProxyAuth returns an Auth that performs CouchDB proxy authentication.
+// Please consult the CouchDB documentation for more information on proxy
+// authentication:
+//
+// http://docs.couchdb.org/en/latest/api/server/authn.html?highlight=proxy#proxy-authentication
 func ProxyAuth(username string, roles []string, secret string) Auth {
 	pa := &proxyauth{username, strings.Join(roles, ","), ""}
 	if secret != "" {

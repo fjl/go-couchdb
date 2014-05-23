@@ -109,9 +109,8 @@ func (db *DB) DeleteAttachment(docid, name, rev string) (newrev string, err erro
 func attpath(db, docid, name, rev string) string {
 	if rev == "" {
 		return path(db, docid, name)
-	} else {
-		return path(db, docid, name) + "?rev=" + url.QueryEscape(rev)
 	}
+	return path(db, docid, name) + "?rev=" + url.QueryEscape(rev)
 }
 
 func attFromHeaders(name string, resp *http.Response) (*Attachment, error) {

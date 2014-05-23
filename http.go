@@ -163,33 +163,32 @@ type Error struct {
 func (e *Error) Error() string {
 	if e.ErrorCode == "" {
 		return fmt.Sprintf("%v %v: %v", e.Method, e.URL, e.StatusCode)
-	} else {
-		return fmt.Sprintf("%v %v: (%v) %v: %v",
-			e.Method, e.URL, e.StatusCode, e.ErrorCode, e.Reason)
 	}
+	return fmt.Sprintf("%v %v: (%v) %v: %v",
+		e.Method, e.URL, e.StatusCode, e.ErrorCode, e.Reason)
 }
 
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 404. This is useful
-// for conditional creation of databases and documents.
+// NotFound checks whether the given errors is a DatabaseError
+// with StatusCode == 404. This is useful for conditional creation
+// of databases and documents.
 func NotFound(err error) bool {
 	return ErrorStatus(err, http.StatusNotFound)
 }
 
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 401.
+// Unauthorized checks whether the given error is a DatabaseError
+// with StatusCode == 401.
 func Unauthorized(err error) bool {
 	return ErrorStatus(err, http.StatusUnauthorized)
 }
 
-// Convenience function that checks whether the given error
-// is a DatabaseError with StatusCode == 409.
+// Conflict checks whether the given error is a DatabaseError
+// with StatusCode == 409.
 func Conflict(err error) bool {
 	return ErrorStatus(err, http.StatusConflict)
 }
 
-// ErrorStatus checks whether the given error
-// is a DatabaseError with a matching statusCode.
+// ErrorStatus checks whether the given error is a DatabaseError
+// with a matching statusCode.
 func ErrorStatus(err error, statusCode int) bool {
 	dberr, ok := err.(*Error)
 	return ok && dberr.StatusCode == statusCode
