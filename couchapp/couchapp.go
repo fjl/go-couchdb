@@ -19,14 +19,15 @@ import (
 	"strings"
 )
 
-var (
-	DefaultIgnorePatterns = []string{
-		"*~", // editor swap files
-		".*", // hidden files
-		"_*", // CouchDB system fields
-	}
-)
+// DefaultIgnorePatterns contains the default list of glob patterns
+// that are ignored when building a document from a directory.
+var DefaultIgnorePatterns = []string{
+	"*~", // editor swap files
+	".*", // hidden files
+	"_*", // CouchDB system fields
+}
 
+// Doc represents CouchDB documents.
 type Doc map[string]interface{}
 
 // LoadFile creates a document from a single JSON file.
@@ -98,9 +99,8 @@ func LoadDirectory(dirname string, ignores []string) (Doc, error) {
 	})
 	if err != nil {
 		return nil, err
-	} else {
-		return stack.obj, err
 	}
+	return stack.obj, err
 }
 
 type objstack struct {
@@ -111,9 +111,8 @@ type objstack struct {
 func load(filename string) (interface{}, error) {
 	if path.Ext(filename) == ".json" {
 		return loadJSON(filename)
-	} else {
-		return loadString(filename)
 	}
+	return loadString(filename)
 }
 
 // loadString returns the given file's contents as a string
@@ -161,11 +160,10 @@ func findLine(data []byte, offset int64) (line int) {
 
 // stripExtension returns the given filename without its extension.
 func stripExtension(filename string) string {
-	if i := strings.LastIndex(filename, "."); i == -1 {
-		return filename
-	} else {
+	if i := strings.LastIndex(filename, "."); i != -1 {
 		return filename[:i]
 	}
+	return filename
 }
 
 // Store updates the given document in a database.
