@@ -192,3 +192,23 @@ func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
 	}
 	return readBody(resp, &result)
 }
+
+// AllDocs invokes the _all_docs view of a database.
+//
+// The output of the query is unmarshalled into the given result.
+// The format of the result depends on the options. Please
+// refer to the CouchDB HTTP API documentation for all the possible
+// options that can be set.
+//
+// http://docs.couchdb.org/en/latest/api/database/bulk-api.html#db-all-docs
+func (db *DB) AllDocs(result interface{}, opts Options) error {
+	path, err := optpath(opts, db.name, "_all_docs")
+	if err != nil {
+		return err
+	}
+	resp, err := db.request("GET", path, nil)
+	if err != nil {
+		return err
+	}
+	return readBody(resp, &result)
+}

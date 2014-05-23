@@ -253,16 +253,6 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-type testviewResult struct {
-	TotalRows int   `json:"total_rows"`
-	Offset    int   `json:"offset"`
-	Rows      []row `json:"rows"`
-}
-type row struct {
-	Id, Key string
-	Value   int
-}
-
 func TestView(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_design/test/_view/testview",
@@ -297,6 +287,16 @@ func TestView(t *testing.T) {
 			}`)
 		})
 
+	type row struct {
+		Id, Key string
+		Value   int
+	}
+	type testviewResult struct {
+		TotalRows int `json:"total_rows"`
+		Offset    int
+		Rows      []row
+	}
+
 	var result testviewResult
 	err := c.DB("db").View("_design/test", "testview", &result, couchdb.Options{
 		"offset": 5,
@@ -314,6 +314,76 @@ func TestView(t *testing.T) {
 			{"SpaghettiWithMeatballs", "meatballs", 1},
 			{"SpaghettiWithMeatballs", "spaghetti", 1},
 			{"SpaghettiWithMeatballs", "tomato sauce", 1},
+		},
+	}
+	check(t, "result", expected, result)
+}
+
+func TestAllDocs(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/_all_docs",
+		func(resp ResponseWriter, req *Request) {
+			expected := url.Values{
+				"offset": {"5"},
+				"limit":  {"100"},
+			}
+			check(t, "request query values", expected, req.URL.Query())
+
+			io.WriteString(resp, `{
+				"total_rows": 2666,
+				"rows": [
+					{
+						"value": {
+							"rev": "1-a3544d296de19e6f5b932ea77d886942"
+						},
+						"id": "Zingylemontart",
+						"key": "Zingylemontart"
+					},
+					{
+						"value": {
+							"rev": "1-91635098bfe7d40197a1b98d7ee085fc"
+						},
+						"id": "Yogurtraita",
+						"key": "Yogurtraita"
+					}
+				],
+				"offset" : 5
+			}`)
+		})
+
+	type alldocsResult struct {
+		TotalRows int `json:"total_rows"`
+		Offset    int
+		Rows      []map[string]interface{}
+	}
+
+	var result alldocsResult
+	err := c.DB("db").AllDocs(&result, couchdb.Options{
+		"offset": 5,
+		"limit":  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := alldocsResult{
+		TotalRows: 2666,
+		Offset:    5,
+		Rows: []map[string]interface{}{
+			{
+				"key": "Zingylemontart",
+				"id":  "Zingylemontart",
+				"value": map[string]interface{}{
+					"rev": "1-a3544d296de19e6f5b932ea77d886942",
+				},
+			},
+			{
+				"key": "Yogurtraita",
+				"id":  "Yogurtraita",
+				"value": map[string]interface{}{
+					"rev": "1-91635098bfe7d40197a1b98d7ee085fc",
+				},
+			},
 		},
 	}
 	check(t, "result", expected, result)
