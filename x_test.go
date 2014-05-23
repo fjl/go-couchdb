@@ -65,6 +65,6 @@ func newTestClient(t *testing.T) *testClient {
 
 func check(t *testing.T, field string, expected, actual interface{}) {
 	if !reflect.DeepEqual(expected, actual) {
-		t.Errorf("%s mismatch:\nwant %#v\ngot %#v", field, expected, actual)
+		t.Errorf("%s mismatch:\nwant %#v\ngot  %#v", field, expected, actual)
 	}
 }
