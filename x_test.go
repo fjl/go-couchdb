@@ -58,9 +58,13 @@ func (s *testClient) RoundTrip(req *Request) (*Response, error) {
 }
 
 func newTestClient(t *testing.T) *testClient {
-	c := &testClient{t: t, handlers: make(map[string]Handler)}
-	c.Client = couchdb.NewClient("http://testClient:5984/", c)
-	return c
+	tc := &testClient{t: t, handlers: make(map[string]Handler)}
+	client, err := couchdb.NewClient("http://testClient:5984/", tc)
+	if err != nil {
+		t.Fatalf("couchdb.NewClient returned error: %v", err)
+	}
+	tc.Client = client
+	return tc
 }
 
 func check(t *testing.T, field string, expected, actual interface{}) {

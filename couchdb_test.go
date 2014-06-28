@@ -1,6 +1,7 @@
 package couchdb_test
 
 import (
+	"errors"
 	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
@@ -9,6 +10,64 @@ import (
 	"regexp"
 	"testing"
 )
+
+type roundTripperFunc func(*Request) (*Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *Request) (*Response, error) {
+	return f(r)
+}
+
+func TestNewClient(t *testing.T) {
+	tests := []struct {
+		URL                         string
+		SetAuth                     couchdb.Auth
+		ExpectURL, ExpectAuthHeader string
+	}{
+		// No Auth
+		{
+			URL:       "http://127.0.0.1:5984/",
+			ExpectURL: "http://127.0.0.1:5984",
+		},
+		{
+			URL:       "http://hostname:5984/foobar?query=1",
+			ExpectURL: "http://hostname:5984/foobar",
+		},
+		// Credentials in URL
+		{
+			URL:              "http://user:password@hostname:5984/",
+			ExpectURL:        "http://hostname:5984",
+			ExpectAuthHeader: "Basic dXNlcjpwYXNzd29yZA==",
+		},
+		// Credentials in URL and explicit SetAuth, SetAuth credentials win
+		{
+			URL:              "http://urluser:urlpassword@hostname:5984/",
+			SetAuth:          couchdb.BasicAuth("user", "password"),
+			ExpectURL:        "http://hostname:5984",
+			ExpectAuthHeader: "Basic dXNlcjpwYXNzd29yZA==",
+		},
+	}
+
+	for i, test := range tests {
+		rt := roundTripperFunc(func(r *Request) (*Response, error) {
+			a := r.Header.Get("Authorization")
+			if a != test.ExpectAuthHeader {
+				t.Errorf("test %d: auth header mismatch: got %q, want %q", i, a, test.ExpectAuthHeader)
+			}
+			return nil, errors.New("nothing to see here, move along")
+		})
+		c, err := couchdb.NewClient(test.URL, rt)
+		if err != nil {
+			t.Fatalf("test %d: NewClient returned unexpected error: %v", i, err)
+		}
+		if c.URL() != test.ExpectURL {
+			t.Errorf("test %d: ServerURL mismatch: got %q, want %q", i, c.URL(), test.ExpectURL)
+		}
+		if test.SetAuth != nil {
+			c.SetAuth(test.SetAuth)
+		}
+		c.Ping() // trigger round trip
+	}
+}
 
 func TestServerURL(t *testing.T) {
 	c := newTestClient(t)
