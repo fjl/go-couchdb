@@ -39,7 +39,7 @@ type DBUpdatesFeed struct {
 func (c *Client) DBUpdates(options Options) (*DBUpdatesFeed, error) {
 	newopts := options.clone()
 	newopts["feed"] = "continuous"
-	path, err := optpath(newopts, "_db_updates")
+	path, err := optpath(newopts, nil, "_db_updates")
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ type ChangesFeed struct {
 //
 // http://docs.couchdb.org/en/latest/api/database/changes.html#db-changes
 func (db *DB) Changes(options Options) (*ChangesFeed, error) {
-	path, err := optpath(options, db.name, "_changes")
+	path, err := optpath(options, nil, db.name, "_changes")
 	if err != nil {
 		return nil, err
 	}

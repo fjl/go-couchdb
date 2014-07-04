@@ -79,6 +79,7 @@ func (c *Client) EnsureDB(name string) (*DB, error) {
 	}
 	return db, nil
 }
+
 // DeleteDB deletes an existing database.
 func (c *Client) DeleteDB(name string) error {
 	_, err := c.closedRequest("DELETE", path(name), nil)
@@ -113,6 +114,8 @@ func (db *DB) Name() string {
 	return db.name
 }
 
+var getJsonKeys = []string{"open_revs", "atts_since"}
+
 // Get retrieves a document from the given database.
 // The document is unmarshalled into the given object.
 // Some fields (like _conflicts) will only be returned if the
@@ -121,7 +124,7 @@ func (db *DB) Name() string {
 //
 // http://docs.couchdb.org/en/latest/api/document/common.html?highlight=doc#get--db-docid
 func (db *DB) Get(id string, doc interface{}, opts Options) error {
-	path, err := optpath(opts, db.name, id)
+	path, err := optpath(opts, getJsonKeys, db.name, id)
 	if err != nil {
 		return err
 	}
@@ -141,10 +144,7 @@ func (db *DB) Rev(id string) (string, error) {
 
 // Put stores a document into the given database.
 func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err error) {
-	path := path(db.name, id)
-	if rev != "" {
-		path += "?rev=" + url.QueryEscape(rev)
-	}
+	path := revpath(rev, db.name, id)
 	// TODO: make it possible to stream encoder output somehow
 	json, err := json.Marshal(doc)
 	if err != nil {
@@ -156,7 +156,7 @@ func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err er
 
 // Delete marks a document revision as deleted.
 func (db *DB) Delete(id, rev string) (newrev string, err error) {
-	path, _ := optpath(Options{"rev": rev}, db.name, id)
+	path := revpath(rev, db.name, id)
 	return responseRev(db.closedRequest("DELETE", path, nil))
 }
 
@@ -197,6 +197,8 @@ func (db *DB) PutSecurity(secobj *Security) error {
 	return err
 }
 
+var viewJsonKeys = []string{"startkey", "start_key", "key", "endkey", "end_key"}
+
 // View invokes a view.
 // The ddoc parameter must be the full name of the design document
 // containing the view definition, including the _design/ prefix.
@@ -211,7 +213,7 @@ func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
 	if !strings.HasPrefix(ddoc, "_design/") {
 		return errors.New("couchdb.View: design doc name must start with _design/")
 	}
-	path, err := optpath(opts, db.name, ddoc, "_view", view)
+	path, err := optpath(opts, viewJsonKeys, db.name, ddoc, "_view", view)
 	if err != nil {
 		return err
 	}
@@ -231,7 +233,7 @@ func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
 //
 // http://docs.couchdb.org/en/latest/api/database/bulk-api.html#db-all-docs
 func (db *DB) AllDocs(result interface{}, opts Options) error {
-	path, err := optpath(opts, db.name, "_all_docs")
+	path, err := optpath(opts, viewJsonKeys, db.name, "_all_docs")
 	if err != nil {
 		return err
 	}

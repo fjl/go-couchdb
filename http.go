@@ -3,10 +3,13 @@ package couchdb
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -21,31 +24,6 @@ func (opts Options) clone() (result Options) {
 		result[k] = v
 	}
 	return
-}
-
-// query encodes an Options map as an URL query string
-func (opts Options) encode() (string, error) {
-	buf := new(bytes.Buffer)
-	buf.WriteRune('?')
-	amp := false
-	for k, v := range opts {
-		if amp {
-			buf.WriteRune('&')
-		}
-		buf.WriteString(url.QueryEscape(k))
-		buf.WriteRune('=')
-		if strval, ok := v.(string); ok {
-			buf.WriteString(url.QueryEscape(strval))
-		} else {
-			jsonv, err := json.Marshal(v)
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(url.QueryEscape(string(jsonv)))
-		}
-		amp = true
-	}
-	return buf.String(), nil
 }
 
 type transport struct {
@@ -112,22 +90,92 @@ func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Re
 	return resp, err
 }
 
-func path(segs ...string) (r string) {
+func path(segs ...string) string {
+	r := ""
 	for _, seg := range segs {
 		r += "/"
 		r += url.QueryEscape(seg)
 	}
-	return
+	return r
 }
 
-func optpath(opts Options, segs ...string) (r string, err error) {
-	r = path(segs...)
-	if len(opts) > 0 {
-		if os, err := opts.encode(); err == nil {
-			r += os
-		}
+func revpath(rev string, segs ...string) string {
+	r := path(segs...)
+	if rev != "" {
+		r += "?rev=" + url.QueryEscape(rev)
 	}
-	return
+	return r
+}
+
+func optpath(opts Options, jskeys []string, segs ...string) (string, error) {
+	r := path(segs...)
+	if len(opts) > 0 {
+		os, err := encopts(opts, jskeys)
+		if err != nil {
+			return "", err
+		}
+		r += os
+	}
+	return r, nil
+}
+
+func encopts(opts Options, jskeys []string) (string, error) {
+	buf := new(bytes.Buffer)
+	buf.WriteRune('?')
+	amp := false
+	for k, v := range opts {
+		if amp {
+			buf.WriteByte('&')
+		}
+		buf.WriteString(url.QueryEscape(k))
+		buf.WriteByte('=')
+		isjson := false
+		for _, jskey := range jskeys {
+			if k == jskey {
+				isjson = true
+				break
+			}
+		}
+		if isjson {
+			jsonv, err := json.Marshal(v)
+			if err != nil {
+				return "", fmt.Errorf("invalid option %q: %v", k, err)
+			}
+			buf.WriteString(url.QueryEscape(string(jsonv)))
+		} else {
+			if err := encval(buf, k, v); err != nil {
+				return "", fmt.Errorf("invalid option %q: %v", k, err)
+			}
+		}
+		amp = true
+	}
+	return buf.String(), nil
+}
+
+func encval(w io.Writer, k string, v interface{}) error {
+	if v == nil {
+		return errors.New("value is nil")
+	}
+	rv := reflect.ValueOf(v)
+	var str string
+	switch rv.Kind() {
+	case reflect.String:
+		str = url.QueryEscape(rv.String())
+	case reflect.Bool:
+		str = strconv.FormatBool(rv.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		str = strconv.FormatInt(rv.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		str = strconv.FormatUint(rv.Uint(), 10)
+	case reflect.Float32:
+		str = strconv.FormatFloat(rv.Float(), 'f', -1, 32)
+	case reflect.Float64:
+		str = strconv.FormatFloat(rv.Float(), 'f', -1, 64)
+	default:
+		return fmt.Errorf("unsupported type: %s", rv.Type())
+	}
+	_, err := io.WriteString(w, str)
+	return err
 }
 
 // responseRev returns the unquoted Etag of a response.

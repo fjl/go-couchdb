@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 )
 
 // Attachment represents document attachments.
@@ -28,7 +27,7 @@ func (db *DB) Attachment(docid, name, rev string) (*Attachment, error) {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	resp, err := db.request("GET", attpath(db.name, docid, name, rev), nil)
+	resp, err := db.request("GET", revpath(rev, db.name, docid, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +51,7 @@ func (db *DB) AttachmentMeta(docid, name, rev string) (*Attachment, error) {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	path := attpath(db.name, docid, name, rev)
+	path := revpath(rev, db.name, docid, name)
 	resp, err := db.closedRequest("HEAD", path, nil)
 	if err != nil {
 		return nil, err
@@ -73,7 +72,7 @@ func (db *DB) PutAttachment(docid string, att *Attachment, rev string) (newrev s
 		return rev, fmt.Errorf("couchdb.PutAttachment: nil attachment Body")
 	}
 
-	path := attpath(db.name, docid, att.Name, rev)
+	path := revpath(rev, db.name, docid, att.Name)
 	req, err := db.newRequest("PUT", path, att.Body)
 	if err != nil {
 		return rev, err
@@ -101,16 +100,9 @@ func (db *DB) DeleteAttachment(docid, name, rev string) (newrev string, err erro
 		return rev, fmt.Errorf("couchdb.PutAttachment: empty name")
 	}
 
-	path := attpath(db.name, docid, name, rev)
+	path := revpath(rev, db.name, docid, name)
 	resp, err := db.closedRequest("DELETE", path, nil)
 	return responseRev(resp, err)
-}
-
-func attpath(db, docid, name, rev string) string {
-	if rev == "" {
-		return path(db, docid, name)
-	}
-	return path(db, docid, name) + "?rev=" + url.QueryEscape(rev)
 }
 
 func attFromHeaders(name string, resp *http.Response) (*Attachment, error) {

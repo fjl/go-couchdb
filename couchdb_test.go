@@ -383,8 +383,9 @@ func TestAllDocs(t *testing.T) {
 	c.Handle("GET /db/_all_docs",
 		func(resp ResponseWriter, req *Request) {
 			expected := url.Values{
-				"offset": {"5"},
-				"limit":  {"100"},
+				"offset":   {"5"},
+				"limit":    {"100"},
+				"startkey": {"[\"Zingylemontart\",\"Yogurtraita\"]"},
 			}
 			check(t, "request query values", expected, req.URL.Query())
 
@@ -418,8 +419,9 @@ func TestAllDocs(t *testing.T) {
 
 	var result alldocsResult
 	err := c.DB("db").AllDocs(&result, couchdb.Options{
-		"offset": 5,
-		"limit":  100,
+		"offset":   5,
+		"limit":    100,
+		"startkey": []string{"Zingylemontart", "Yogurtraita"},
 	})
 	if err != nil {
 		t.Fatal(err)
