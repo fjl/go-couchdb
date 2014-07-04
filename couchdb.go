@@ -71,6 +71,14 @@ func (c *Client) CreateDB(name string) (*DB, error) {
 	return c.DB(name), nil
 }
 
+// EnsureDB ensures that a database with the given name exists.
+func (c *Client) EnsureDB(name string) (*DB, error) {
+	db, err := c.CreateDB(name)
+	if err != nil && !ErrorStatus(err, http.StatusPreconditionFailed) {
+		return nil, err
+	}
+	return db, nil
+}
 // DeleteDB deletes an existing database.
 func (c *Client) DeleteDB(name string) error {
 	_, err := c.closedRequest("DELETE", path(name), nil)
