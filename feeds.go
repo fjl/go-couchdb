@@ -109,10 +109,15 @@ type ChangesFeed struct {
 	// by CouchDB.
 	Seq int64 `json:"seq"`
 
+	// LastSeq last change sequence number
+	LastSeq bool `json:"last_seq"`
+
 	// Changes is the list of the document's leaf revisions.
-	Changes []struct {
-		Rev string `json:"rev"`
-	} `json:"changes"`
+	/*
+		Changes []struct {
+			Rev string `json:"rev"`
+		} `json:"changes"`
+	*/
 
 	// The document. This is populated only if the feed option
 	// "include_docs" is true.
@@ -175,6 +180,11 @@ func (db *DB) Changes(options Options) (*ChangesFeed, error) {
 // Next decodes the next event. It returns false when the feeds end has been
 // reached or an error has occurred.
 func (f *ChangesFeed) Next() bool {
+	// the json doesn't include the 'deleted' attr unless it's deleted,
+	// so we need to set this to false before parsing the next row so that
+	// it's not maintained from the previous row
+	f.Deleted = false
+
 	if f.end {
 		return false
 	}
@@ -199,17 +209,10 @@ func (f *ChangesFeed) Close() error {
 func (f *ChangesFeed) contParser(r io.Reader) func() error {
 	dec := json.NewDecoder(r)
 	return func() error {
-		var row struct {
-			ID      string `json:"id"`
-			Seq     int64  `json:"seq"`
-			Deleted bool   `json:"deleted"`
-			LastSeq bool   `json:"last_seq"`
-		}
-		if err := dec.Decode(&row); err != nil {
+		if err := dec.Decode(f); err != nil {
 			return err
 		}
-		f.ID, f.Seq, f.Deleted = row.ID, row.Seq, row.Deleted
-		if row.LastSeq {
+		if f.LastSeq {
 			f.end = true
 			return nil
 		}
