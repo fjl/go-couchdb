@@ -192,6 +192,18 @@ func responseRev(resp *http.Response, err error) (string, error) {
 	}
 }
 
+// responseRev returns the ID and Rev provided in the JSON body
+func responseIDRev(resp *http.Response) (string, string, error) {
+	var res struct {
+		ID  string `json:"id"`
+		Rev string `json:"rev"`
+	}
+	if err := readBody(resp, &res); err != nil {
+		return "", "", err
+	}
+	return res.ID, res.Rev, nil
+}
+
 func readBody(resp *http.Response, v interface{}) error {
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		resp.Body.Close()

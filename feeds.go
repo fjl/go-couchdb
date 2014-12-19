@@ -110,7 +110,7 @@ type ChangesFeed struct {
 	Seq int64 `json:"seq"`
 
 	// LastSeq last change sequence number
-	LastSeq bool `json:"last_seq"`
+	LastSeq int `json:"last_seq"`
 
 	// Changes is the list of the document's leaf revisions.
 	/*
@@ -212,7 +212,7 @@ func (f *ChangesFeed) contParser(r io.Reader) func() error {
 		if err := dec.Decode(f); err != nil {
 			return err
 		}
-		if f.LastSeq {
+		if f.LastSeq > 0 {
 			f.end = true
 			return nil
 		}
