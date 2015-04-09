@@ -154,6 +154,37 @@ func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err er
 	return responseRev(db.closedRequest("PUT", path, b))
 }
 
+type CreatedDoc struct {
+	Id  string `json:"id"`
+	Ok  bool   `json:"ok"`
+	Rev string `json:"rev"`
+}
+
+// Post creates a document into the given database with the document ID
+// set in the "_id" field or a generated ID if the "_id" field is not
+// present.
+func (db *DB) Post(doc interface{}) (docid, newrev string, err error) {
+	path := path(db.name)
+	json, err := json.Marshal(doc)
+	if err != nil {
+		return "", "", err
+	}
+	b := bytes.NewReader(json)
+	resp, err := db.request("POST", path, b)
+	if err != nil {
+		return
+	}
+	createddoc := CreatedDoc{}
+	err = readBody(resp, &createddoc)
+	if err != nil {
+		return "", "", err
+	}
+	if !createddoc.Ok {
+		return "", "", errors.New("Error creating document")
+	}
+	return createddoc.Id, createddoc.Rev, nil
+}
+
 // Delete marks a document revision as deleted.
 func (db *DB) Delete(id, rev string) (newrev string, err error) {
 	path := revpath(rev, db.name, id)

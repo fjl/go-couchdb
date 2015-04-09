@@ -180,6 +180,7 @@ func TestPutSecurity(t *testing.T) {
 }
 
 type testDocument struct {
+	Id    string `json:"_id,omitempty"`
 	Rev   string `json:"_rev,omitempty"`
 	Field int64  `json:"field"`
 }
@@ -286,6 +287,54 @@ func TestPutWithRev(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(t, "returned rev", "2-619db7ba8551c0de3f3a178775509611", rev)
+}
+
+func TestPost(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("POST /db", func(resp ResponseWriter, req *Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(StatusCreated)
+		io.WriteString(resp, `{
+			"id": "160A2692-BE13-4464-BD65-59D56A41BEBA",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	doc := &testDocument{Field: 999}
+	id, rev, err := c.DB("db").Post(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "returned id", "160A2692-BE13-4464-BD65-59D56A41BEBA", id)
+	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
+}
+
+func TestPostWithID(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("POST /db", func(resp ResponseWriter, req *Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"_id":"doc","field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(StatusCreated)
+		io.WriteString(resp, `{
+			"id": "doc",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	doc := &testDocument{Id: "doc", Field: 999}
+	id, rev, err := c.DB("db").Post(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "returned id", "doc", id)
+	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
 
 func TestDelete(t *testing.T) {
