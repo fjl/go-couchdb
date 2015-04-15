@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -48,10 +49,32 @@ func (t *transport) setAuth(a Auth) {
 }
 
 func (t *transport) newRequest(method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, t.prefix+path, body)
-	if err != nil {
-		return nil, err
+	// workaround for https://github.com/golang/go/issues/5684
+	// see also http://godoc.org/net/url#URL
+	parsed, _ := url.Parse(t.prefix + path)
+	pathcomp := strings.Split(path, "?")
+
+	newurl := url.URL{
+		Host:   parsed.Host,
+		Scheme: parsed.Scheme,
+		Opaque: pathcomp[0],
 	}
+	if len(pathcomp) > 1 {
+		newurl.RawQuery = pathcomp[1]
+	}
+
+	req := &http.Request{
+		Method: method,
+		Host:   parsed.Host,
+		URL:    &newurl,
+		Header: http.Header{
+			"User-Agent": {"go-couchdb/1.0"},
+		},
+	}
+	if body != nil {
+		req.Body = ioutil.NopCloser(body)
+	}
+
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.auth != nil {
@@ -94,7 +117,7 @@ func path(segs ...string) string {
 	r := ""
 	for _, seg := range segs {
 		r += "/"
-		r += url.QueryEscape(seg)
+		r += seg
 	}
 	return r
 }

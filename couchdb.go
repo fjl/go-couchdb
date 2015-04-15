@@ -124,6 +124,19 @@ var getJsonKeys = []string{"open_revs", "atts_since"}
 //
 // http://docs.couchdb.org/en/latest/api/document/common.html?highlight=doc#get--db-docid
 func (db *DB) Get(id string, doc interface{}, opts Options) error {
+	// issue #1: slashes in document IDs need to be escaped.
+	// ref: http://wiki.apache.org/couchdb/HTTP_Document_API#line-75
+	const DDOC_PREFIX = "_design"
+	segments := strings.Split(id, "/")
+	if len(segments) > 1 {
+		if segments[0] == DDOC_PREFIX {
+			// preferred encoding for design docs is _design/seg1%2Fseg2
+			id = segments[0] + "/" + strings.Join(segments[1:], "%2F")
+		} else {
+			id = strings.Join(segments, "%2F")
+		}
+	}
+
 	path, err := optpath(opts, getJsonKeys, db.name, id)
 	if err != nil {
 		return err

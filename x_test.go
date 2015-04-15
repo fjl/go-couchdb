@@ -35,9 +35,13 @@ func (s *testClient) ClearHandlers() {
 }
 
 func (s *testClient) RoundTrip(req *Request) (*Response, error) {
-	handler, ok := s.handlers[req.Method+" "+req.URL.Path]
+	path := req.URL.Path
+	if path == "" {
+		path = req.URL.Opaque
+	}
+	handler, ok := s.handlers[req.Method+" "+path]
 	if !ok {
-		s.t.Fatalf("unhandled request: %s %s", req.Method, req.URL.Path)
+		s.t.Fatalf("unhandled request: %s %s", req.Method, path)
 		return nil, nil
 	}
 	recorder := httptest.NewRecorder()

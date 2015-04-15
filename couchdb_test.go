@@ -202,6 +202,60 @@ func TestGetExistingDoc(t *testing.T) {
 	check(t, "doc.Field", int64(999), doc.Field)
 }
 
+func TestGetExistingDocWithSlashInId(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/doc%2Fslash", func(resp ResponseWriter, req *Request) {
+		io.WriteString(resp, `{
+			"_id": "doc",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+			"field": 999
+		}`)
+	})
+
+	var doc testDocument
+	if err := c.DB("db").Get("doc/slash", &doc, nil); err != nil {
+		t.Fatal(err)
+	}
+	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
+	check(t, "doc.Field", int64(999), doc.Field)
+}
+
+func TestGetDesignDoc(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/_design/myddoc", func(resp ResponseWriter, req *Request) {
+		io.WriteString(resp, `{
+			"_id": "doc",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+			"field": 999
+		}`)
+	})
+
+	var doc testDocument
+	if err := c.DB("db").Get("_design/myddoc", &doc, nil); err != nil {
+		t.Fatal(err)
+	}
+	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
+	check(t, "doc.Field", int64(999), doc.Field)
+}
+
+func TestGetDesignDocWithSlashInId(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/_design/myddoc%2Fslashed", func(resp ResponseWriter, req *Request) {
+		io.WriteString(resp, `{
+			"_id": "doc",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+			"field": 999
+		}`)
+	})
+
+	var doc testDocument
+	if err := c.DB("db").Get("_design/myddoc/slashed", &doc, nil); err != nil {
+		t.Fatal(err)
+	}
+	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
+	check(t, "doc.Field", int64(999), doc.Field)
+}
+
 func TestGetNonexistingDoc(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
