@@ -204,11 +204,19 @@ func (f *ChangesFeed) contParser(r io.Reader) func() error {
 			Seq     int64  `json:"seq"`
 			Deleted bool   `json:"deleted"`
 			LastSeq bool   `json:"last_seq"`
+			// Changes is the list of the document's leaf revisions.
+			Changes []struct {
+				Rev string `json:"rev"`
+			} `json:"changes"`
+
+			// The document. This is populated only if the feed option
+			// "include_docs" is true.
+			Doc json.RawMessage `json:"doc"`
 		}
 		if err := dec.Decode(&row); err != nil {
 			return err
 		}
-		f.ID, f.Seq, f.Deleted = row.ID, row.Seq, row.Deleted
+		f.ID, f.Seq, f.Deleted, f.Changes, f.Doc = row.ID, row.Seq, row.Deleted, row.Changes, row.Doc
 		if row.LastSeq {
 			f.end = true
 			return nil
