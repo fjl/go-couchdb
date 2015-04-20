@@ -51,6 +51,7 @@ func (t *transport) setAuth(a Auth) {
 func (t *transport) newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	// workaround for https://github.com/golang/go/issues/5684
 	// see also http://godoc.org/net/url#URL
+	// most of the request creation code was taken from net/http/request.go NewRequest()
 	parsed, _ := url.Parse(t.prefix + path)
 	pathcomp := strings.Split(path, "?")
 
@@ -63,16 +64,33 @@ func (t *transport) newRequest(method, path string, body io.Reader) (*http.Reque
 		newurl.RawQuery = pathcomp[1]
 	}
 
+	rc, ok := body.(io.ReadCloser)
+	if !ok && body != nil {
+		rc = ioutil.NopCloser(body)
+	}
+
 	req := &http.Request{
-		Method: method,
-		Host:   parsed.Host,
-		URL:    &newurl,
+		Method:     method,
+		URL:        &newurl,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Host:       parsed.Host,
 		Header: http.Header{
 			"User-Agent": {"go-couchdb/1.0"},
 		},
+		Body: rc,
 	}
+
 	if body != nil {
-		req.Body = ioutil.NopCloser(body)
+		switch v := body.(type) {
+		case *bytes.Buffer:
+			req.ContentLength = int64(v.Len())
+		case *bytes.Reader:
+			req.ContentLength = int64(v.Len())
+		case *strings.Reader:
+			req.ContentLength = int64(v.Len())
+		}
 	}
 
 	t.mu.RLock()
@@ -80,6 +98,7 @@ func (t *transport) newRequest(method, path string, body io.Reader) (*http.Reque
 	if t.auth != nil {
 		t.auth.AddAuth(req)
 	}
+
 	return req, nil
 }
 
@@ -173,6 +192,23 @@ func encopts(opts Options, jskeys []string) (string, error) {
 		amp = true
 	}
 	return buf.String(), nil
+}
+
+func encid(id string) string {
+	// issue #1: slashes in document IDs need to be escaped.
+	// ref: http://wiki.apache.org/couchdb/HTTP_Document_API#line-75
+	const DDOC_PREFIX = "_design"
+	segments := strings.Split(id, "/")
+	if len(segments) > 1 {
+		if segments[0] == DDOC_PREFIX {
+			// preferred encoding for design docs is _design/seg1%2Fseg2
+			id = segments[0] + "/" + strings.Join(segments[1:], "%2F")
+		} else {
+			id = strings.Join(segments, "%2F")
+		}
+	}
+
+	return id
 }
 
 func encval(w io.Writer, k string, v interface{}) error {

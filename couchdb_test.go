@@ -95,12 +95,48 @@ func TestCreateDB(t *testing.T) {
 	check(t, "db.Name()", "db", db.Name())
 }
 
+func TestCreateDBWithSlashInId(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("PUT /user%2F12345", func(resp ResponseWriter, req *Request) {})
+
+	db, err := c.CreateDB("user/12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check(t, "db.Name()", "user/12345", db.Name())
+}
+
 func TestDeleteDB(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("DELETE /db", func(resp ResponseWriter, req *Request) {})
 	if err := c.DeleteDB("db"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestEnsureDB(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("PUT /ensuredb", func(resp ResponseWriter, req *Request) {})
+
+	db, err := c.EnsureDB("ensuredb")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check(t, "db.Name()", "ensuredb", db.Name())
+}
+
+func TestEnsureDBWithSlashInName(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("PUT /ensuredb%2Fslash", func(resp ResponseWriter, req *Request) {})
+
+	db, err := c.EnsureDB("ensuredb/slash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	check(t, "db.Name()", "ensuredb/slash", db.Name())
 }
 
 func TestAllDBs(t *testing.T) {
@@ -314,6 +350,30 @@ func TestPut(t *testing.T) {
 	}
 	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
+
+func TestPutWithSlashes(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("PUT /user%2F12345/todo%2F2711", func(resp ResponseWriter, req *Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(StatusCreated)
+		io.WriteString(resp, `{
+			"id": "doc",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	doc := &testDocument{Field: 999}
+	rev, err := c.DB("user/12345").Put("todo/2711", doc, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
+}
+
 
 func TestPutWithRev(t *testing.T) {
 	c := newTestClient(t)
