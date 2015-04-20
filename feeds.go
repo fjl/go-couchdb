@@ -140,7 +140,7 @@ type ChangesFeed struct {
 //
 // http://docs.couchdb.org/en/latest/api/database/changes.html#db-changes
 func (db *DB) Changes(options Options) (*ChangesFeed, error) {
-	path, err := optpath(options, nil, db.name, "_changes")
+	path, err := optpath(options, nil, encid(db.name), "_changes")
 	if err != nil {
 		return nil, err
 	}
