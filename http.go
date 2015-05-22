@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -85,7 +86,7 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Response, error) {
 	resp, err := t.request(method, path, body)
 	if err == nil {
-		resp.Body.Close()
+		io.Copy(ioutil.Discard, resp.Body)
 	}
 	return resp, err
 }
