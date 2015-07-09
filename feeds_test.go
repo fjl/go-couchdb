@@ -1,10 +1,11 @@
 package couchdb_test
 
 import (
-	"github.com/fjl/go-couchdb"
 	"io"
 	. "net/http"
 	"testing"
+
+	"github.com/gwik/go-couchdb"
 )
 
 func TestDBUpdatesFeed(t *testing.T) {

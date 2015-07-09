@@ -2,7 +2,7 @@ package couchdb_test
 
 import (
 	"errors"
-	"github.com/fjl/go-couchdb"
+	"github.com/gwik/go-couchdb"
 	"io"
 	"io/ioutil"
 	. "net/http"
