@@ -87,6 +87,7 @@ func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Re
 	resp, err := t.request(method, path, body)
 	if err == nil {
 		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
 	}
 	return resp, err
 }
