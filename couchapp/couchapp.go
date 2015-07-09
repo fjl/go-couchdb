@@ -11,12 +11,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/fjl/go-couchdb"
 	"io/ioutil"
 	"mime"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/gwik/go-couchdb"
 )
 
 // DefaultIgnorePatterns contains the default list of glob patterns

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
 	. "net/http"
 	"testing"
+
+	"github.com/gwik/go-couchdb"
 )
 
 var (
