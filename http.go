@@ -206,12 +206,19 @@ func responseIDRev(resp *http.Response) (string, string, error) {
 	return res.ID, res.Rev, nil
 }
 
+// Read the response body and decode in JSON.
+// We're not using the json.Decoder struct here as it appears to cause
+// problems with persistent connections.
 func readBody(resp *http.Response, v interface{}) error {
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		resp.Body.Close()
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return err
 	}
-	return resp.Body.Close()
+	if err = json.Unmarshal(body, &v); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Error represents API-level errors, reported by CouchDB as
