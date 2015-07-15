@@ -1,7 +1,7 @@
 package couchdb_test
 
 import (
-	"github.com/fjl/go-couchdb"
+	"./"
 	"io"
 	. "net/http"
 	"testing"
