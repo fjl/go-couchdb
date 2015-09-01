@@ -1,13 +1,12 @@
-package couchdb_test
+package couchdb
 
 import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
-	. "net/http"
+	"net/http"
 	"testing"
 )
 
@@ -19,7 +18,7 @@ var (
 func TestAttachment(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/doc/attachment/1",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			resp.Header().Set("content-md5", "2mGd+/VXL8dJsUlrD//Xag==")
 			resp.Header().Set("content-type", "text/plain")
 			io.WriteString(resp, "the content")
@@ -43,10 +42,10 @@ func TestAttachment(t *testing.T) {
 func TestAttachmentMeta(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("HEAD /db/doc/attachment/1",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			resp.Header().Set("content-md5", "2mGd+/VXL8dJsUlrD//Xag==")
 			resp.Header().Set("content-type", "text/plain")
-			resp.WriteHeader(StatusOK)
+			resp.WriteHeader(http.StatusOK)
 		})
 
 	att, err := c.DB("db").AttachmentMeta("doc", "attachment/1", "")
@@ -63,7 +62,7 @@ func TestAttachmentMeta(t *testing.T) {
 func TestPutAttachment(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("PUT /db/doc/attachment/1",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			reqBodyContent, err := ioutil.ReadAll(req.Body)
 			if err != nil {
 				t.Fatal(err)
@@ -84,7 +83,7 @@ func TestPutAttachment(t *testing.T) {
 			})
 		})
 
-	att := &couchdb.Attachment{
+	att := &Attachment{
 		Name: "attachment/1",
 		Type: "text/plain",
 		Body: bytes.NewBufferString("the content"),
@@ -103,7 +102,7 @@ func TestPutAttachment(t *testing.T) {
 func TestDeleteAttachment(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("DELETE /db/doc/attachment/1",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			check(t, "request query string",
 				"rev=1-619db7ba8551c0de3f3a178775509611",
 				req.URL.RawQuery)

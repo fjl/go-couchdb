@@ -1,19 +1,19 @@
-package couchdb_test
+package couchdb
 
 import (
-	. "net/http"
+	"net/http"
 	"testing"
 )
 
 type testauth struct{ called bool }
 
-func (a *testauth) AddAuth(*Request) {
+func (a *testauth) AddAuth(*http.Request) {
 	a.called = true
 }
 
 func TestClientSetAuth(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("HEAD /", func(resp ResponseWriter, req *Request) {})
+	c.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})
 
 	auth := new(testauth)
 	c.SetAuth(auth)

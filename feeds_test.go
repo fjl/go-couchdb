@@ -1,15 +1,14 @@
-package couchdb_test
+package couchdb
 
 import (
-	"github.com/fjl/go-couchdb"
 	"io"
-	. "net/http"
+	"net/http"
 	"testing"
 )
 
 func TestDBUpdatesFeed(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /_db_updates", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /_db_updates", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"db_name": "db",
@@ -59,7 +58,7 @@ func TestDBUpdatesFeed(t *testing.T) {
 
 func TestChangesFeedPoll(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/_changes", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string", "", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"results": [
@@ -117,7 +116,7 @@ func TestChangesFeedPoll(t *testing.T) {
 
 func TestChangesFeedCont(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/_changes", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"seq": 1,
@@ -136,7 +135,7 @@ func TestChangesFeedCont(t *testing.T) {
 		}`+"\n")
 	})
 
-	feed, err := c.DB("db").Changes(couchdb.Options{"feed": "continuous"})
+	feed, err := c.DB("db").Changes(Options{"feed": "continuous"})
 	if err != nil {
 		t.Fatalf("client.Changes error: %v", err)
 	}
