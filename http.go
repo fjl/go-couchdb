@@ -92,9 +92,13 @@ func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Re
 
 func path(segs ...string) string {
 	r := ""
-	for _, seg := range segs {
+	for i, seg := range segs {
 		r += "/"
-		r += url.QueryEscape(seg)
+		if i == 1 && strings.HasPrefix(seg,"_design/") {
+			r += seg
+		} else {
+			r += url.QueryEscape(seg)
+		}
 	}
 	return r
 }

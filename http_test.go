@@ -39,6 +39,7 @@ func TestPath(t *testing.T) {
 		// Expected output						Input
 		"/foo/bar/baz":							[]string{"foo","bar","baz"},
 		"/foo/_design/bar/_view/baz":			[]string{"foo","_design/bar","_view","baz"},
+		"/foo%2Fbar/baz%2Fquz":					[]string{"foo/bar","baz/quz"},
 	}
 	for expected,segs := range data {
 		result := path(segs...)
