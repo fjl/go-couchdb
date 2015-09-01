@@ -33,3 +33,17 @@ func TestClientSetAuth(t *testing.T) {
 		t.Error("AddAuth was called after removing Auth instance")
 	}
 }
+
+func TestPath(t *testing.T) {
+	data := map[string][]string {
+		// Expected output						Input
+		"/foo/bar/baz":							[]string{"foo","bar","baz"},
+		"/foo/_design/bar/_view/baz":			[]string{"foo","_design/bar","_view","baz"},
+	}
+	for expected,segs := range data {
+		result := path(segs...)
+		if result != expected {
+			t.Fatalf("path() produced '%s', expected '%s'", result, expected)
+		}
+	}
+}
