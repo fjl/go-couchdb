@@ -1,12 +1,11 @@
 // This file contains stuff that is used across all the tests.
 
-package couchdb_test
+package couchdb
 
 import (
 	"bytes"
-	"github.com/fjl/go-couchdb"
 	"io/ioutil"
-	. "net/http"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
@@ -21,20 +20,20 @@ import (
 // If no handler matches the requests method/path combination, the test
 // fails with a descriptive error.
 type testClient struct {
-	*couchdb.Client
+	*Client
 	t        *testing.T
-	handlers map[string]Handler
+	handlers map[string]http.Handler
 }
 
-func (s *testClient) Handle(pat string, f func(ResponseWriter, *Request)) {
-	s.handlers[pat] = HandlerFunc(f)
+func (s *testClient) Handle(pat string, f func(http.ResponseWriter, *http.Request)) {
+	s.handlers[pat] = http.HandlerFunc(f)
 }
 
 func (s *testClient) ClearHandlers() {
-	s.handlers = make(map[string]Handler)
+	s.handlers = make(map[string]http.Handler)
 }
 
-func (s *testClient) RoundTrip(req *Request) (*Response, error) {
+func (s *testClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	handler, ok := s.handlers[req.Method+" "+req.URL.Path]
 	if !ok {
 		s.t.Fatalf("unhandled request: %s %s", req.Method, req.URL.Path)
@@ -43,12 +42,12 @@ func (s *testClient) RoundTrip(req *Request) (*Response, error) {
 	recorder := httptest.NewRecorder()
 	recorder.Body = new(bytes.Buffer)
 	handler.ServeHTTP(recorder, req)
-	resp := &Response{
+	resp := &http.Response{
 		Proto:         "HTTP/1.1",
 		ProtoMajor:    1,
 		ProtoMinor:    1,
 		StatusCode:    recorder.Code,
-		Status:        StatusText(recorder.Code),
+		Status:        http.StatusText(recorder.Code),
 		Header:        recorder.HeaderMap,
 		ContentLength: int64(recorder.Body.Len()),
 		Body:          ioutil.NopCloser(recorder.Body),
@@ -58,8 +57,8 @@ func (s *testClient) RoundTrip(req *Request) (*Response, error) {
 }
 
 func newTestClient(t *testing.T) *testClient {
-	tc := &testClient{t: t, handlers: make(map[string]Handler)}
-	client, err := couchdb.NewClient("http://testClient:5984/", tc)
+	tc := &testClient{t: t, handlers: make(map[string]http.Handler)}
+	client, err := NewClient("http://testClient:5984/", tc)
 	if err != nil {
 		t.Fatalf("couchdb.NewClient returned error: %v", err)
 	}

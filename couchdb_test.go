@@ -1,26 +1,25 @@
-package couchdb_test
+package couchdb
 
 import (
 	"errors"
-	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
-	. "net/http"
+	"net/http"
 	"net/url"
 	"regexp"
 	"testing"
 )
 
-type roundTripperFunc func(*Request) (*Response, error)
+type roundTripperFunc func(*http.Request) (*http.Response, error)
 
-func (f roundTripperFunc) RoundTrip(r *Request) (*Response, error) {
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
 
 func TestNewClient(t *testing.T) {
 	tests := []struct {
 		URL                         string
-		SetAuth                     couchdb.Auth
+		SetAuth                     Auth
 		ExpectURL, ExpectAuthHeader string
 	}{
 		// No Auth
@@ -41,21 +40,21 @@ func TestNewClient(t *testing.T) {
 		// Credentials in URL and explicit SetAuth, SetAuth credentials win
 		{
 			URL:              "http://urluser:urlpassword@hostname:5984/",
-			SetAuth:          couchdb.BasicAuth("user", "password"),
+			SetAuth:          BasicAuth("user", "password"),
 			ExpectURL:        "http://hostname:5984",
 			ExpectAuthHeader: "Basic dXNlcjpwYXNzd29yZA==",
 		},
 	}
 
 	for i, test := range tests {
-		rt := roundTripperFunc(func(r *Request) (*Response, error) {
+		rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			a := r.Header.Get("Authorization")
 			if a != test.ExpectAuthHeader {
 				t.Errorf("test %d: auth header mismatch: got %q, want %q", i, a, test.ExpectAuthHeader)
 			}
 			return nil, errors.New("nothing to see here, move along")
 		})
-		c, err := couchdb.NewClient(test.URL, rt)
+		c, err := NewClient(test.URL, rt)
 		if err != nil {
 			t.Fatalf("test %d: NewClient returned unexpected error: %v", i, err)
 		}
@@ -76,7 +75,7 @@ func TestServerURL(t *testing.T) {
 
 func TestPing(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("HEAD /", func(resp ResponseWriter, req *Request) {})
+	c.Handle("HEAD /", func(resp http.ResponseWriter, req *http.Request) {})
 
 	if err := c.Ping(); err != nil {
 		t.Fatal(err)
@@ -85,7 +84,7 @@ func TestPing(t *testing.T) {
 
 func TestCreateDB(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("PUT /db", func(resp ResponseWriter, req *Request) {})
+	c.Handle("PUT /db", func(resp http.ResponseWriter, req *http.Request) {})
 
 	db, err := c.CreateDB("db")
 	if err != nil {
@@ -97,7 +96,7 @@ func TestCreateDB(t *testing.T) {
 
 func TestDeleteDB(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("DELETE /db", func(resp ResponseWriter, req *Request) {})
+	c.Handle("DELETE /db", func(resp http.ResponseWriter, req *http.Request) {})
 	if err := c.DeleteDB("db"); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +104,7 @@ func TestDeleteDB(t *testing.T) {
 
 func TestAllDBs(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /_all_dbs", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /_all_dbs", func(resp http.ResponseWriter, req *http.Request) {
 		io.WriteString(resp, `["a","b","c"]`)
 	})
 
@@ -127,12 +126,12 @@ var securityObjectJSON = regexp.MustCompile("\\s").ReplaceAllString(
 			"roles": ["memberRole1"]
 		}
 	}`, "")
-var securityObject = &couchdb.Security{
-	Admins: couchdb.Members{
+var securityObject = &Security{
+	Admins: Members{
 		Names: []string{"adminName1", "adminName2"},
 		Roles: nil,
 	},
-	Members: couchdb.Members{
+	Members: Members{
 		Names: []string{"memberName1"},
 		Roles: []string{"memberRole1"},
 	},
@@ -140,7 +139,7 @@ var securityObject = &couchdb.Security{
 
 func TestSecurity(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/_security", func(resp http.ResponseWriter, req *http.Request) {
 		io.WriteString(resp, securityObjectJSON)
 	})
 
@@ -153,7 +152,7 @@ func TestSecurity(t *testing.T) {
 
 func TestEmptySecurity(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/_security", func(resp http.ResponseWriter, req *http.Request) {
 		// CouchDB returns an empty reply if no security object has been set
 		resp.WriteHeader(200)
 	})
@@ -162,12 +161,12 @@ func TestEmptySecurity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check(t, "secobj", &couchdb.Security{}, secobj)
+	check(t, "secobj", &Security{}, secobj)
 }
 
 func TestPutSecurity(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("PUT /db/_security", func(resp ResponseWriter, req *Request) {
+	c.Handle("PUT /db/_security", func(resp http.ResponseWriter, req *http.Request) {
 		body, _ := ioutil.ReadAll(req.Body)
 		check(t, "request body", securityObjectJSON, string(body))
 		resp.WriteHeader(200)
@@ -186,7 +185,7 @@ type testDocument struct {
 
 func TestGetExistingDoc(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
 		io.WriteString(resp, `{
 			"_id": "doc",
 			"_rev": "1-619db7ba8551c0de3f3a178775509611",
@@ -204,24 +203,24 @@ func TestGetExistingDoc(t *testing.T) {
 
 func TestGetNonexistingDoc(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
+	c.Handle("GET /db/doc", func(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(404)
 		io.WriteString(resp, `{"error":"not_found","reason":"error reason"}`)
 	})
 
 	var doc testDocument
 	err := c.DB("db").Get("doc", doc, nil)
-	check(t, "couchdb.NotFound(err)", true, couchdb.NotFound(err))
+	check(t, "couchdb.NotFound(err)", true, NotFound(err))
 }
 
 func TestRev(t *testing.T) {
 	c := newTestClient(t)
 	db := c.DB("db")
-	c.Handle("HEAD /db/ok", func(resp ResponseWriter, req *Request) {
+	c.Handle("HEAD /db/ok", func(resp http.ResponseWriter, req *http.Request) {
 		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
 	})
-	c.Handle("HEAD /db/404", func(resp ResponseWriter, req *Request) {
-		NotFound(resp, req)
+	c.Handle("HEAD /db/404", func(resp http.ResponseWriter, req *http.Request) {
+		http.NotFound(resp, req)
 	})
 
 	rev, err := db.Rev("ok")
@@ -232,20 +231,20 @@ func TestRev(t *testing.T) {
 
 	errorRev, err := db.Rev("404")
 	check(t, "errorRev", "", errorRev)
-	check(t, "couchdb.NotFound(err)", true, couchdb.NotFound(err))
-	if _, ok := err.(*couchdb.Error); !ok {
+	check(t, "couchdb.NotFound(err)", true, NotFound(err))
+	if _, ok := err.(*Error); !ok {
 		t.Errorf("expected couchdb.Error, got %#+v", err)
 	}
 }
 
 func TestPut(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("PUT /db/doc", func(resp ResponseWriter, req *Request) {
+	c.Handle("PUT /db/doc", func(resp http.ResponseWriter, req *http.Request) {
 		body, _ := ioutil.ReadAll(req.Body)
 		check(t, "request body", `{"field":999}`, string(body))
 
 		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
-		resp.WriteHeader(StatusCreated)
+		resp.WriteHeader(http.StatusCreated)
 		io.WriteString(resp, `{
 			"id": "doc",
 			"ok": true,
@@ -263,7 +262,7 @@ func TestPut(t *testing.T) {
 
 func TestPutWithRev(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("PUT /db/doc", func(resp ResponseWriter, req *Request) {
+	c.Handle("PUT /db/doc", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string",
 			"rev=1-619db7ba8551c0de3f3a178775509611",
 			req.URL.RawQuery)
@@ -272,7 +271,7 @@ func TestPutWithRev(t *testing.T) {
 		check(t, "request body", `{"field":999}`, string(body))
 
 		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
-		resp.WriteHeader(StatusCreated)
+		resp.WriteHeader(http.StatusCreated)
 		io.WriteString(resp, `{
 			"id": "doc",
 			"ok": true,
@@ -290,13 +289,13 @@ func TestPutWithRev(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	c := newTestClient(t)
-	c.Handle("DELETE /db/doc", func(resp ResponseWriter, req *Request) {
+	c.Handle("DELETE /db/doc", func(resp http.ResponseWriter, req *http.Request) {
 		check(t, "request query string",
 			"rev=1-619db7ba8551c0de3f3a178775509611",
 			req.URL.RawQuery)
 
 		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
-		resp.WriteHeader(StatusOK)
+		resp.WriteHeader(http.StatusOK)
 		io.WriteString(resp, `{
 			"id": "doc",
 			"ok": true,
@@ -315,7 +314,7 @@ func TestDelete(t *testing.T) {
 func TestView(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_design/test/_view/testview",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			expected := url.Values{
 				"offset": {"5"},
 				"limit":  {"100"},
@@ -357,7 +356,7 @@ func TestView(t *testing.T) {
 	}
 
 	var result testviewResult
-	err := c.DB("db").View("_design/test", "testview", &result, couchdb.Options{
+	err := c.DB("db").View("_design/test", "testview", &result, Options{
 		"offset": 5,
 		"limit":  100,
 		"reduce": false,
@@ -381,7 +380,7 @@ func TestView(t *testing.T) {
 func TestAllDocs(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_all_docs",
-		func(resp ResponseWriter, req *Request) {
+		func(resp http.ResponseWriter, req *http.Request) {
 			expected := url.Values{
 				"offset":   {"5"},
 				"limit":    {"100"},
@@ -418,7 +417,7 @@ func TestAllDocs(t *testing.T) {
 	}
 
 	var result alldocsResult
-	err := c.DB("db").AllDocs(&result, couchdb.Options{
+	err := c.DB("db").AllDocs(&result, Options{
 		"offset":   5,
 		"limit":    100,
 		"startkey": []string{"Zingylemontart", "Yogurtraita"},
