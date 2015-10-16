@@ -154,6 +154,38 @@ func (db *DB) Put(id string, doc interface{}, rev string) (newrev string, err er
 	return responseRev(db.closedRequest("PUT", path, b))
 }
 
+// Post creates a new document in the given database.
+// Returns the id and revision of the newly created document.
+//
+// See http://docs.couchdb.org/en/latest/api/database/common.html#post--db
+func (db *DB) Post(doc interface{}) (string, string, error) {
+	path := "/" + db.name
+
+	json, err := json.Marshal(doc)
+	if err != nil {
+		return "", "", err
+	}
+	b := bytes.NewReader(json)
+
+	resp, err := db.request("POST", path, b)
+	if err != nil {
+		return "", "", err
+	}
+
+	var data struct {
+		ID  string `json:"id"`
+		OK  bool   `json:"ok"`
+		Rev string `json:"rev"`
+	}
+
+	err = readBody(resp, &data)
+	if err != nil {
+		return "", "", err
+	}
+
+	return data.ID, data.Rev, nil
+}
+
 // Delete marks a document revision as deleted.
 func (db *DB) Delete(id, rev string) (newrev string, err error) {
 	path := revpath(rev, db.name, id)

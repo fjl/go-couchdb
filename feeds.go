@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 // DBUpdatesFeed is an iterator for the _db_updates feed.
@@ -106,8 +107,9 @@ type ChangesFeed struct {
 
 	// Seq is the database update sequence number of the current event.
 	// After all items have been processed, set to the last_seq value sent
-	// by CouchDB.
-	Seq int64 `json:"seq"`
+	// by CouchDB. In CouchDB1.X, this is an int64. In CouchDB2, this is
+	// an opaque string.
+	Seq interface{} `json:"seq"`
 
 	// Changes is the list of the document's leaf revisions.
 	Changes []struct {
@@ -199,16 +201,25 @@ func (f *ChangesFeed) Close() error {
 func (f *ChangesFeed) contParser(r io.Reader) func() error {
 	dec := json.NewDecoder(r)
 	return func() error {
+
 		var row struct {
-			ID      string `json:"id"`
-			Seq     int64  `json:"seq"`
-			Deleted bool   `json:"deleted"`
-			LastSeq bool   `json:"last_seq"`
+			ID      string      `json:"id"`
+			Seq     interface{} `json:"seq"`
+			Changes []struct {
+				Rev string `json:"rev"`
+			} `json:"changes"`
+			Doc     json.RawMessage `json:"doc"`
+			Deleted bool            `json:"deleted"`
+			LastSeq bool            `json:"last_seq"`
 		}
+
 		if err := dec.Decode(&row); err != nil {
 			return err
 		}
-		f.ID, f.Seq, f.Deleted = row.ID, row.Seq, row.Deleted
+
+		f.ID, f.Seq, f.Deleted, f.Changes, f.Doc =
+			row.ID, row.Seq, row.Deleted, row.Changes, row.Doc
+
 		if row.LastSeq {
 			f.end = true
 			return nil
@@ -234,7 +245,21 @@ func (f *ChangesFeed) pollParser(scan *scanner) func() error {
 			if err = scan.tokens(",", "\"last_seq\"", ":"); err != nil {
 				return err
 			}
-			f.Seq, err = scan.decodeInt64()
+
+			// CouchDB1 and CouchDB2 differ in their Seq fields: ints for the former, and strings
+			// for the latter.
+			var tmp string
+			_, err = fmt.Fscanf(scan.in, "%s", &tmp)
+			if err != nil {
+				return err
+			}
+
+			if tmp[0] == '"' { // String, so CouchDB2-style
+				f.Seq = tmp[1 : len(tmp)-1] // Skip leading and trailling double-quote
+			} else if i, err := strconv.ParseInt(tmp, 10, 64); err == nil {
+				f.Seq = i // int, so we're done
+			}
+
 			return err
 		case next == ',' && !first:
 			scan.skipByte()
