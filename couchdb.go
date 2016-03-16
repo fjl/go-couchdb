@@ -7,7 +7,6 @@ package couchdb
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -216,8 +215,8 @@ func (db *DB) PutSecurity(secobj *Security) error {
 var viewJsonKeys = []string{"startkey", "start_key", "key", "endkey", "end_key"}
 
 // View invokes a view.
-// The ddoc parameter must be the full name of the design document
-// containing the view definition, including the _design/ prefix.
+// The ddoc parameter must be the name of the design document
+// containing the view, but excluding the _design/ prefix.
 //
 // The output of the query is unmarshalled into the given result.
 // The format of the result depends on the options. Please
@@ -226,10 +225,8 @@ var viewJsonKeys = []string{"startkey", "start_key", "key", "endkey", "end_key"}
 //
 // http://docs.couchdb.org/en/latest/api/ddoc/views.html
 func (db *DB) View(ddoc, view string, result interface{}, opts Options) error {
-	if !strings.HasPrefix(ddoc, "_design/") {
-		return errors.New("couchdb.View: design doc name must start with _design/")
-	}
-	path, err := optpath(opts, viewJsonKeys, db.name, ddoc, "_view", view)
+	ddoc = strings.Replace(ddoc, "_design/", "", 1)
+	path, err := optpath(opts, viewJsonKeys, db.name, "_design", ddoc, "_view", view)
 	if err != nil {
 		return err
 	}
