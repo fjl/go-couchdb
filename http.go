@@ -52,6 +52,10 @@ func (t *transport) newRequest(method, path string, body io.Reader) (*http.Reque
 	if err != nil {
 		return nil, err
 	}
+	if method == "PUT" {
+		// required by pouchdb-server or it ignores the body
+		req.Header.Set("Content-Type", "application/json")
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.auth != nil {
