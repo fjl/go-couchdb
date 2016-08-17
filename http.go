@@ -68,6 +68,7 @@ func (t *transport) newRequest(method, path string, body io.Reader) (*http.Reque
 // Status codes >= 400 are treated as errors.
 func (t *transport) request(method, path string, body io.Reader) (*http.Response, error) {
 	req, err := t.newRequest(method, path, body)
+	req.Header.Add("Content-Type", "application/json") // Required for POST
 	if err != nil {
 		return nil, err
 	}

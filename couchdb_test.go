@@ -260,6 +260,30 @@ func TestPut(t *testing.T) {
 	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
 
+func TestPost(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("POST /db", func(resp http.ResponseWriter, req *http.Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", `{"field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(http.StatusCreated)
+		io.WriteString(resp, `{
+			"id": "619db7ba8551c0de3f3a178775509611",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	doc := &testDocument{Field: 999}
+	id, rev, err := c.DB("db").Post(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "returned rev", "1-619db7ba8551c0de3f3a178775509611", rev)
+	check(t, "returned id", "619db7ba8551c0de3f3a178775509611", id)
+}
+
 func TestPutWithRev(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("PUT /db/doc", func(resp http.ResponseWriter, req *http.Request) {
