@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"fmt"
 )
 
 // Client represents a remote CouchDB server.
@@ -68,6 +69,13 @@ func (c *Client) CreateDB(name string) (*DB, error) {
 		return c.DB(name), err
 	}
 	return c.DB(name), nil
+}
+
+// CreateDBWithShards creates a new database with the specified number of shards
+func (c *Client) CreateDBWithShards(name string, shards int) (*DB, error) {
+	_, err := c.closedRequest("PUT", fmt.Sprintf("%s?q=%d", path(name), shards), nil)
+
+	return c.DB(name), err
 }
 
 // EnsureDB ensures that a database with the given name exists.
