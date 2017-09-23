@@ -271,7 +271,9 @@ func parseError(resp *http.Response) error {
 	var reply struct{ Error, Reason string }
 	if resp.Request.Method != "HEAD" {
 		if err := readBody(resp, &reply); err != nil {
-			return fmt.Errorf("couldn't decode CouchDB error: %v", err)
+			unknown := fmt.Sprintf("unknown, couldn't decode CouchDB error: %v", err)
+			reply.Error = unknown
+			reply.Reason = unknown
 		}
 	}
 	return &Error{
