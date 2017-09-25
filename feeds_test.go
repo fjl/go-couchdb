@@ -1,7 +1,7 @@
 package couchdb_test
 
 import (
-	"github.com/fjl/go-couchdb"
+	"github.com/cabify/go-couchdb"
 	"io"
 	. "net/http"
 	"testing"
@@ -57,86 +57,28 @@ func TestDBUpdatesFeed(t *testing.T) {
 	}
 }
 
-func TestChangesFeedPoll(t *testing.T) {
-	c := newTestClient(t)
-	c.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
-		check(t, "request query string", "", req.URL.RawQuery)
-		io.WriteString(resp, `{
-			"results": [
-				{
-					"seq": 1,
-					"id": "doc",
-					"deleted": true,
-					"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
-				},
-				{
-					"seq": 2,
-					"id": "doc",
-					"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
-				}
-			],
-			"last_seq": 99
-		}`)
-	})
-
-	feed, err := c.DB("db").Changes(nil)
-	if err != nil {
-		t.Fatalf("client.Changes error: %v", err)
-	}
-
-	// TODO: check "changes"
-
-	t.Log("-- first event")
-	check(t, "feed.Next()", true, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
-
-	check(t, "feed.ID", "doc", feed.ID)
-	check(t, "feed.Seq", int64(1), feed.Seq)
-	check(t, "feed.Deleted", true, feed.Deleted)
-
-	t.Log("-- second event")
-	check(t, "feed.Next()", true, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
-
-	check(t, "feed.ID", "doc", feed.ID)
-	check(t, "feed.Seq", int64(2), feed.Seq)
-	check(t, "feed.Deleted", false, feed.Deleted)
-
-	t.Log("-- end of feed")
-	check(t, "feed.Next()", false, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
-
-	check(t, "feed.ID", "", feed.ID)
-	check(t, "feed.Seq", int64(99), feed.Seq)
-	check(t, "feed.Deleted", false, feed.Deleted)
-
-	if err := feed.Close(); err != nil {
-		t.Fatalf("feed.Close error: %v", err)
-	}
-}
-
-func TestChangesFeedCont(t *testing.T) {
+func TestContinouousChangesFeed(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_changes", func(resp ResponseWriter, req *Request) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
-			"seq": 1,
+			"seq": "1",
 			"id": "doc",
 			"deleted": true,
 			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
 		}`+"\n")
 		io.WriteString(resp, `{
-			"seq": 2,
+			"seq": "2",
 			"id": "doc",
 			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
 		}`+"\n")
 		io.WriteString(resp, `{
-			"seq": 99,
-			"last_seq": true
+			"seq": "99",
+			"last_seq": "99"
 		}`+"\n")
 	})
 
-	feed, err := c.DB("db").Changes(couchdb.Options{"feed": "continuous"})
+	feed, err := c.DB("db").ContinuousChanges(couchdb.Options{"feed": "continuous"})
 	if err != nil {
 		t.Fatalf("client.Changes error: %v", err)
 	}
@@ -144,27 +86,29 @@ func TestChangesFeedCont(t *testing.T) {
 	// TODO: check "changes"
 
 	t.Log("-- first event")
-	check(t, "feed.Next()", true, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
+	ok, err := feed.Next()
+	check(t, "feed.Next()", true, ok)
+	check(t, "feed.Err()", error(nil), err)
 
 	check(t, "feed.ID", "doc", feed.ID)
-	check(t, "feed.Seq", int64(1), feed.Seq)
+	check(t, "feed.Seq", "1", feed.Seq)
 	check(t, "feed.Deleted", true, feed.Deleted)
 
 	t.Log("-- second event")
-	check(t, "feed.Next()", true, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
+	ok, err = feed.Next()
+	check(t, "feed.Next()", true, ok)
+	check(t, "feed.Err()", error(nil), err)
 
 	check(t, "feed.ID", "doc", feed.ID)
-	check(t, "feed.Seq", int64(2), feed.Seq)
+	check(t, "feed.Seq", "2", feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)
 
 	t.Log("-- end of feed")
-	check(t, "feed.Next()", false, feed.Next())
-	check(t, "feed.Err()", error(nil), feed.Err())
+	ok, err = feed.Next()
+	check(t, "feed.Next()", false, ok)
+	check(t, "feed.Err()", error(nil), err)
 
-	check(t, "feed.ID", "", feed.ID)
-	check(t, "feed.Seq", int64(99), feed.Seq)
+	check(t, "feed.Seq", "99", feed.Seq)
 	check(t, "feed.Deleted", false, feed.Deleted)
 
 	if err := feed.Close(); err != nil {

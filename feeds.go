@@ -1,8 +1,6 @@
 package couchdb
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,66 +105,55 @@ type ChangesFeed struct {
 	// Seq is the database update sequence number of the current event.
 	// After all items have been processed, set to the last_seq value sent
 	// by CouchDB.
-	Seq int64 `json:"seq"`
+	Seq interface{} `json:"seq"`
+
+	// LastSeq last change sequence number
+	LastSeq interface{} `json:"last_seq"`
 
 	// Changes is the list of the document's leaf revisions.
-	Changes []struct {
-		Rev string `json:"rev"`
-	} `json:"changes"`
+	/*
+		Changes []struct {
+			Rev string `json:"rev"`
+		} `json:"changes"`
+	*/
 
 	// The document. This is populated only if the feed option
 	// "include_docs" is true.
 	Doc json.RawMessage `json:"doc"`
 
-	end    bool
-	err    error
-	conn   io.Closer
-	parser func() error
+	end     bool
+	err     error
+	conn    io.Closer
+	decoder *json.Decoder
+	parser  func() error
 }
 
-// Changes opens the _changes feed of a database. This feed receives an event
-// whenever a document is created, updated or deleted.
+// ContinuousChanges opens the _changes feed of a database for continuous feed updates.
+// This feed receives an event whenever a document is created, updated or deleted.
 //
-// The implementation supports both poll-style and continuous feeds.
-// The default feed mode is "normal", which retrieves changes up to some point
-// and then closes the feed. If you want a never-ending feed, set the "feed"
-// option to "continuous":
-//
-//     feed, err := client.Changes("db", couchdb.Options{"feed": "continuous"})
-//
+// This implementation only continuous feeds.
+
 // There are many other options that allow you to customize what the
 // feed returns. For information on all of them, see the official CouchDB
 // documentation:
 //
 // http://docs.couchdb.org/en/latest/api/database/changes.html#db-changes
-func (db *DB) Changes(options Options) (*ChangesFeed, error) {
+func (db *DB) ContinuousChanges(options Options) (*ChangesFeed, error) {
+	options["feed"] = "continuous"
 	path, err := optpath(options, nil, db.name, "_changes")
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := db.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
-	feed := &ChangesFeed{DB: db, conn: resp.Body}
 
-	switch options["feed"] {
-	case nil, "normal", "longpoll":
-		scan := newScanner(resp.Body)
-		if err := scan.tokens("{", "\"results\"", ":", "["); err != nil {
-			feed.Close()
-			return nil, err
-		}
-		feed.parser = feed.pollParser(scan)
-	case "continuous":
-		feed.parser = feed.contParser(resp.Body)
-	default:
-		err := fmt.Errorf(
-			`couchdb: unsupported value for option "feed": %#v`,
-			options["feed"],
-		)
-		feed.Close()
-		return nil, err
+	feed := &ChangesFeed{
+		DB:      db,
+		conn:    resp.Body,
+		decoder: json.NewDecoder(resp.Body),
 	}
 
 	return feed, nil
@@ -174,14 +161,19 @@ func (db *DB) Changes(options Options) (*ChangesFeed, error) {
 
 // Next decodes the next event. It returns false when the feeds end has been
 // reached or an error has occurred.
-func (f *ChangesFeed) Next() bool {
+func (f *ChangesFeed) Next() (bool, error) {
+	// the json doesn't include the 'deleted' attr unless it's deleted,
+	// so we need to set this to false before parsing the next row so that
+	// it's not maintained from the previous row
+	f.Deleted = false
+
 	if f.end {
-		return false
+		return false, nil
 	}
-	if f.err = f.parser(); f.err != nil || f.end {
+	if f.err = f.parse(); f.err != nil || f.end {
 		f.Close()
 	}
-	return !f.end
+	return !f.end, f.err
 }
 
 // Err returns the last error that occurred during iteration.
@@ -196,202 +188,35 @@ func (f *ChangesFeed) Close() error {
 	return f.conn.Close()
 }
 
-func (f *ChangesFeed) contParser(r io.Reader) func() error {
-	dec := json.NewDecoder(r)
-	return func() error {
-		var row struct {
-			ID      string `json:"id"`
-			Seq     int64  `json:"seq"`
-			Deleted bool   `json:"deleted"`
-			LastSeq bool   `json:"last_seq"`
-		}
-		if err := dec.Decode(&row); err != nil {
-			return err
-		}
-		f.ID, f.Seq, f.Deleted = row.ID, row.Seq, row.Deleted
-		if row.LastSeq {
-			f.end = true
-			return nil
-		}
-		return nil
+func (f *ChangesFeed) parse() error {
+	if err := f.decoder.Decode(f); err != nil {
+		return err
 	}
-}
 
-func (f *ChangesFeed) pollParser(scan *scanner) func() error {
-	first := true
-	return func() error {
-		// reset fields.
-		f.ID, f.Deleted = "", false
-
-		next, err := scan.peek()
-		switch {
-		case err != nil:
-			return err
-		case next == ']':
-			// decode last_seq key
-			f.end = true
-			scan.skipByte()
-			if err = scan.tokens(",", "\"last_seq\"", ":"); err != nil {
-				return err
-			}
-			f.Seq, err = scan.decodeInt64()
-			return err
-		case next == ',' && !first:
-			scan.skipByte()
-		}
-		first = false
-		return scan.decodeObject(f)
-	}
-}
-
-type scanner struct {
-	in *bufio.Reader
-
-	// stuff for the JSON buffering FSM
-	jsbuf bytes.Buffer
-	state scanState
-	stack []scanState
-}
-
-func newScanner(r io.Reader) *scanner {
-	return &scanner{in: bufio.NewReaderSize(r, 4096)}
-}
-
-// peek returns the next non-whitespace byte in the input stream
-func (s *scanner) peek() (byte, error) {
-	b, err := s.skipSpace()
-	if err != nil {
-		return 0, err
-	}
-	s.in.UnreadByte()
-	return b, nil
-}
-
-// skipByte drops the next byte from the input stream.
-func (s *scanner) skipByte() error {
-	_, err := s.in.ReadByte()
+	var err error
+	f.end, err = f.isEnd()
 	return err
 }
 
-// tokens verifies that the given tokens are present in the
-// input stream. Whitespace between tokens is skipped.
-func (s *scanner) tokens(toks ...string) error {
-	for _, tok := range toks {
-		b, err := s.skipSpace()
-		if err != nil {
-			return err
-		}
-		tbuf := make([]byte, len(tok))
-		tbuf[0] = b
-		if len(tok) > 1 {
-			if _, err := io.ReadFull(s.in, tbuf[1:]); err != nil {
-				return err
-			}
-		}
-		for i := 0; i < len(tok); i++ {
-			if tbuf[i] != tok[i] {
-				return fmt.Errorf(
-					"unexpected token: found %q, want %q", tbuf, tok,
-				)
-			}
-		}
+func (f *ChangesFeed) isEnd() (bool, error) {
+	if f.LastSeq == nil {
+		return false, nil
 	}
-	return nil
-}
 
-// skipSpace searches for the next non-whitespace byte
-// in the input stream.
-func (s *scanner) skipSpace() (byte, error) {
-	for {
-		b, err := s.in.ReadByte()
-		if err != nil {
-			return 0, err
-		}
-		switch b {
-		case ' ', '\t', '\r', '\n':
-			continue
-		default:
-			return b, nil
-		}
-	}
-}
-
-// decodeInt64 reads an integer from the input stream.
-func (s *scanner) decodeInt64() (num int64, err error) {
-	_, err = fmt.Fscanf(s.in, "%d", &num)
-	return
-}
-
-// decodeObject reads a JSON object from the input stream.
-func (s *scanner) decodeObject(target interface{}) error {
-	b, err := s.skipSpace()
-	switch {
-	case err != nil:
-		return err
-	case b == '{':
-		s.state = jsonStateObj
+	switch f.LastSeq.(type) {
+	case string:
+		return f.LastSeq.(string) != "", nil
+	case int:
+		return f.LastSeq.(int) > 0, nil
+	case int64:
+		return f.LastSeq.(int64) > 0, nil
+	case float32:
+		return f.LastSeq.(float32) > 0, nil
+	case float64:
+		return f.LastSeq.(float64) > 0, nil
 	default:
-		return fmt.Errorf("invalid character %q at start of JSON object", b)
+		err := fmt.Errorf("LastSeq of type %T is not supported, assuming feed end", f.LastSeq)
+		return true, err
 	}
 
-	// buffer input until there's a complete value in the buffer
-	s.jsbuf.Reset()
-	s.jsbuf.WriteByte(b)
-	s.stack = nil
-	for s.state != nil {
-		b, err := s.in.ReadByte()
-		if err != nil {
-			return err
-		}
-		s.state = s.state(s, b)
-		s.jsbuf.WriteByte(b)
-	}
-
-	return json.Unmarshal(s.jsbuf.Bytes(), target)
-}
-
-// JSON buffering FSM.
-
-type scanState func(s *scanner, b byte) scanState
-
-func (s *scanner) popState() scanState {
-	if len(s.stack) == 0 {
-		return nil
-	}
-	prev := s.stack[len(s.stack)-1]
-	s.stack = s.stack[:len(s.stack)-1]
-	return prev
-}
-
-func (s *scanner) pushState(next scanState) scanState {
-	s.stack = append(s.stack, s.state)
-	return next
-}
-
-func jsonStateObj(s *scanner, b byte) scanState {
-	switch b {
-	case '}':
-		return s.popState()
-	case '{':
-		return s.pushState(jsonStateObj)
-	case '"':
-		return s.pushState(jsonStateString)
-	default:
-		return jsonStateObj
-	}
-}
-
-func jsonStateString(s *scanner, b byte) scanState {
-	switch b {
-	case '\\':
-		return jsonStateStringEsc
-	case '"':
-		return s.popState()
-	default:
-		return jsonStateString
-	}
-}
-
-func jsonStateStringEsc(*scanner, byte) scanState {
-	return jsonStateString
 }

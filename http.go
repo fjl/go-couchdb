@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -71,6 +72,9 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 	if err != nil {
 		return nil, err
 	}
+	if method != "GET" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	resp, err := t.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -85,6 +89,7 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Response, error) {
 	resp, err := t.request(method, path, body)
 	if err == nil {
+		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}
 	return resp, err
@@ -189,12 +194,31 @@ func responseRev(resp *http.Response, err error) (string, error) {
 	}
 }
 
+// responseRev returns the ID and Rev provided in the JSON body
+func responseIDRev(resp *http.Response) (string, string, error) {
+	var res struct {
+		ID  string `json:"id"`
+		Rev string `json:"rev"`
+	}
+	if err := readBody(resp, &res); err != nil {
+		return "", "", err
+	}
+	return res.ID, res.Rev, nil
+}
+
+// Read the response body and decode in JSON.
+// We're not using the json.Decoder struct here as it appears to cause
+// problems with persistent connections.
 func readBody(resp *http.Response, v interface{}) error {
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		resp.Body.Close()
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return err
 	}
-	return resp.Body.Close()
+	if err = json.Unmarshal(body, &v); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Error represents API-level errors, reported by CouchDB as

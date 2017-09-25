@@ -4,7 +4,7 @@ package couchdb_test
 
 import (
 	"bytes"
-	"github.com/fjl/go-couchdb"
+	"github.com/cabify/go-couchdb"
 	"io/ioutil"
 	. "net/http"
 	"net/http/httptest"

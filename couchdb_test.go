@@ -2,7 +2,7 @@ package couchdb_test
 
 import (
 	"errors"
-	"github.com/fjl/go-couchdb"
+	"github.com/cabify/go-couchdb"
 	"io"
 	"io/ioutil"
 	. "net/http"
@@ -357,7 +357,7 @@ func TestView(t *testing.T) {
 	}
 
 	var result testviewResult
-	err := c.DB("db").View("_design/test", "testview", &result, couchdb.Options{
+	err := c.DB("db").View("test", "testview", &result, couchdb.Options{
 		"offset": 5,
 		"limit":  100,
 		"reduce": false,
