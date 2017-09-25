@@ -3,8 +3,8 @@
 package couchdb_test
 
 import (
-	"./"
 	"bytes"
+	"github.com/cabify/go-couchdb"
 	"io/ioutil"
 	. "net/http"
 	"net/http/httptest"
