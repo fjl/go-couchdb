@@ -1,10 +1,10 @@
 package couchdb_test
 
 import (
-	"./"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/cabify/go-couchdb"
 	"io"
 	"io/ioutil"
 	. "net/http"

@@ -7,10 +7,10 @@ package couchdb
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-	"fmt"
 )
 
 // Client represents a remote CouchDB server.
