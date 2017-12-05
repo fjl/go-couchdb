@@ -16,6 +16,7 @@ import (
 // Client represents a remote CouchDB server.
 type Client struct{ *transport }
 
+// NewClient creates a new Client
 // addr should contain scheme and host, and optionally port and path. All other attributes will be ignored
 // If client is nil, default http.Client will be used
 // If auth is nil, no auth will be set
