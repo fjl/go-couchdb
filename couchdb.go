@@ -16,27 +16,15 @@ import (
 // Client represents a remote CouchDB server.
 type Client struct{ *transport }
 
-// NewClient creates a new client object.
-//
-// If rawurl contains credentials, the client will authenticate
-// using HTTP Basic Authentication. If rawurl has a query string,
-// it is ignored.
-//
-// The second argument can be nil to use http.Transport,
-// which should be good enough in most cases.
-func NewClient(rawurl string, rt http.RoundTripper) (*Client, error) {
-	url, err := url.Parse(rawurl)
-	if err != nil {
-		return nil, err
-	}
-	url.RawQuery, url.Fragment = "", ""
-	var auth Auth
-	if url.User != nil {
-		passwd, _ := url.User.Password()
-		auth = BasicAuth(url.User.Username(), passwd)
-		url.User = nil
-	}
-	return &Client{newTransport(url.String(), rt, auth)}, nil
+// NewClient creates a new Client
+// addr should contain scheme and host, and optionally port and path. All other attributes will be ignored
+// If client is nil, default http.Client will be used
+// If auth is nil, no auth will be set
+func NewClient(addr *url.URL, client *http.Client, auth Auth) *Client {
+	prefixAddr := *addr
+	// cleanup our address
+	prefixAddr.User, prefixAddr.RawQuery, prefixAddr.Fragment = nil, "", ""
+	return &Client{newTransport(prefixAddr.String(), client, auth) }
 }
 
 // URL returns the URL prefix of the server.

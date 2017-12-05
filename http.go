@@ -34,10 +34,13 @@ type transport struct {
 	auth   Auth
 }
 
-func newTransport(prefix string, rt http.RoundTripper, auth Auth) *transport {
+func newTransport(prefix string, httpClient *http.Client, auth Auth) *transport {
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
 	return &transport{
 		prefix: strings.TrimRight(prefix, "/"),
-		http:   &http.Client{Transport: rt},
+		http:   httpClient,
 		auth:   auth,
 	}
 }
