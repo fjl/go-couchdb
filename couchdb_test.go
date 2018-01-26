@@ -2,13 +2,14 @@ package couchdb_test
 
 import (
 	"errors"
-	"github.com/cabify/go-couchdb"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
 	"testing"
+
+	"github.com/cabify/go-couchdb"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -20,7 +21,7 @@ func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestNewClient(t *testing.T) {
 	tests := []struct {
 		URL                         *url.URL
-		Auth couchdb.Auth
+		Auth                        couchdb.Auth
 		SetAuth                     couchdb.Auth
 		ExpectURL, ExpectAuthHeader string
 	}{
@@ -37,7 +38,7 @@ func TestNewClient(t *testing.T) {
 		{
 			URL:              asURL("http://user:password@hostname:5984/"),
 			ExpectURL:        "http://hostname:5984",
-			Auth:          		couchdb.BasicAuth("user", "password"),
+			Auth:             couchdb.BasicAuth("user", "password"),
 			ExpectAuthHeader: "Basic dXNlcjpwYXNzd29yZA==",
 		},
 		// Credentials in URL and explicit SetAuth, SetAuth credentials win
@@ -448,6 +449,101 @@ func TestAllDocs(t *testing.T) {
 		},
 	}
 	check(t, "result", expected, result)
+}
+
+func TestSyncDesignNoChange(t *testing.T) {
+	design := couchdb.NewDesign("test")
+	design.AddView("by_created_at", &couchdb.View{
+		Map:    "function(d) { if (d['created_at']) { emit(d['created_at'], 1); } }",
+		Reduce: "_sum",
+	})
+	c := newTestClient(t)
+	// Getting the current version
+	c.Handle("GET /db/_design/test", func(resp http.ResponseWriter, req *http.Request) {
+		io.WriteString(resp, `{
+			"_id": "_design/test",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+      "language": "javascript",
+			"views": {
+        "by_created_at": {
+          "map": "function(d) { if (d['created_at']) { emit(d['created_at'], 1); } }",
+          "reduce": "_sum"
+        }
+      }
+		}`)
+	})
+	db := c.DB("db")
+	db.SyncDesign(design)
+	check(t, "design.Rev", "1-619db7ba8551c0de3f3a178775509611", design.Rev)
+}
+
+func TestSyncDesignCreate(t *testing.T) {
+	design := couchdb.NewDesign("test")
+	design.AddView("by_created_at", &couchdb.View{
+		Map:    "function(d) { if (d['created_at']) { emit(d['created_at'], 1); } }",
+		Reduce: "_sum",
+	})
+	c := newTestClient(t)
+	// Getting the current version (which doesn't exist)
+	c.Handle("GET /db/_design/test", func(resp http.ResponseWriter, req *http.Request) {
+		resp.WriteHeader(404)
+		io.WriteString(resp, `{"error":"not_found","reason":"error reason"}`)
+	})
+	// Putting a new version
+	c.Handle("PUT /db/_design/test", func(resp http.ResponseWriter, req *http.Request) {
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(http.StatusCreated)
+		io.WriteString(resp, `{
+			"id": "_design/test",
+			"ok": true,
+			"rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+	db := c.DB("db")
+	db.SyncDesign(design)
+	check(t, "design.Rev", "1-619db7ba8551c0de3f3a178775509611", design.Rev)
+}
+
+func TestSyncDesignUpdate(t *testing.T) {
+	design := couchdb.NewDesign("test")
+	design.AddView("by_created_at", &couchdb.View{
+		Map:    "function(d) { if (d['created_at']) { emit(d['created_at'], 1); } }",
+		Reduce: "_sum",
+	})
+	c := newTestClient(t)
+	// Getting the current version
+	c.Handle("GET /db/_design/test", func(resp http.ResponseWriter, req *http.Request) {
+		io.WriteString(resp, `{
+			"_id": "_design/test",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611",
+      "language": "javascript",
+			"views": {
+        "by_created_at": {
+          "map": "function(d) { if (d['created_at']) { emit(d['created_at'], null); } }"
+        }
+      }
+		}`)
+	})
+	// Putting a new version
+	c.Handle("PUT /db/_design/test", func(resp http.ResponseWriter, req *http.Request) {
+		check(t, "request query string",
+			"rev=1-619db7ba8551c0de3f3a178775509611",
+			req.URL.RawQuery)
+
+		//body, _ := ioutil.ReadAll(req.Body)
+		//check(t, "request body", `{"field":999}`, string(body))
+
+		resp.Header().Set("ETag", `"2-619db7ba8551c0de3f3a178775509611"`)
+		resp.WriteHeader(http.StatusCreated)
+		io.WriteString(resp, `{
+			"id": "_design/test",
+			"ok": true,
+			"rev": "2-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+	db := c.DB("db")
+	db.SyncDesign(design)
+	check(t, "design.Rev", "2-619db7ba8551c0de3f3a178775509611", design.Rev)
 }
 
 func asURL(raw string) *url.URL {

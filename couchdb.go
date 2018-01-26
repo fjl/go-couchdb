@@ -24,7 +24,7 @@ func NewClient(addr *url.URL, client *http.Client, auth Auth) *Client {
 	prefixAddr := *addr
 	// cleanup our address
 	prefixAddr.User, prefixAddr.RawQuery, prefixAddr.Fragment = nil, "", ""
-	return &Client{newTransport(prefixAddr.String(), client, auth) }
+	return &Client{newTransport(prefixAddr.String(), client, auth)}
 }
 
 // URL returns the URL prefix of the server.
@@ -251,4 +251,30 @@ func (db *DB) AllDocs(result interface{}, opts Options) error {
 		return err
 	}
 	return readBody(resp, &result)
+}
+
+// SyncDesign will attempt to create or update a design document on the provided
+// database. This can be called multiple times for different databases,
+// the latest Rev will always be fetched before storing the design.
+func (db *DB) SyncDesign(d *Design) error {
+	// Get the previous design doc so we can compare and extract Rev if needed
+	prev := &Design{}
+	if err := db.Get(d.ID, prev, nil); err != nil {
+		if !NotFound(err) {
+			return err
+		}
+	}
+	if prev.Rev != "" {
+		if d.ViewChecksum() == prev.ViewChecksum() {
+			// nothing to do!
+			d.Rev = prev.Rev
+			return nil
+		}
+	}
+	if rev, err := db.Put(d.ID, d, prev.Rev); err != nil {
+		return err
+	} else {
+		d.Rev = rev
+	}
+	return nil
 }

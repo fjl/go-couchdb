@@ -41,30 +41,6 @@ func (d *Design) AddView(name string, view *View) {
 	d.Views[name] = view
 }
 
-// Sync will attempt to create or update a design document on the provided
-// database.
-func (d *Design) Sync(db *DB) error {
-	// Get the previous design doc so we can compare and extract Rev if needed
-	prev := &Design{}
-	if err := db.Get(d.ID, prev, nil); err != nil {
-		if !NotFound(err) {
-			return err
-		}
-	}
-	if prev.Rev != "" {
-		if d.ViewChecksum() == prev.ViewChecksum() {
-			// nothing to do!
-			return nil
-		}
-	}
-	if rev, err := db.Put(d.ID, d, prev.Rev); err != nil {
-		return err
-	} else {
-		d.Rev = rev
-	}
-	return nil
-}
-
 // ViewChecksum will generate a checksum or hash of the design documents
 // views such that two design documents can be compared to see if an update
 // is required.
