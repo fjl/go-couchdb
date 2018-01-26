@@ -18,6 +18,8 @@ func TestTimeUnmarshal(t *testing.T) {
 		{`"2009-11-10T13:19:04Z"`, time.Date(2009, time.November, 10, 13, 19, 4, 0, time.UTC), false},
 		// bad form
 		{`"Z2009-11-10T13:19:04Z"`, time.Time{}, true},
+		// nil string
+		{`null`, time.Time{}, false},
 	}
 
 	for _, c := range cases {
@@ -39,6 +41,7 @@ func TestTimeMarshal(t *testing.T) {
 	}{
 		{time.Date(2009, time.November, 10, 23, 19, 45, 0, time.UTC), `"2009-11-10T23:19:45.000Z"`},
 		{time.Date(2009, time.November, 10, 13, 19, 4, 0, time.UTC), `"2009-11-10T13:19:04.000Z"`},
+		{time.Time{}, `null`},
 	}
 
 	for _, c := range cases {
@@ -85,6 +88,8 @@ func TestTimeWithZoneUnmarshal(t *testing.T) {
 		{`"2009-11-10T23:19:45-0600"`, time.Date(2009, time.November, 10, 23, 19, 45, 0, tl), false},
 		// bad form
 		{`"Z2009-11-10T13:19:04Z"`, time.Time{}, true},
+		// nil string
+		{`null`, time.Time{}, false},
 	}
 
 	for _, c := range cases {
@@ -107,6 +112,7 @@ func TestTimeWithZoneMarshal(t *testing.T) {
 	}{
 		{time.Date(2009, time.November, 10, 23, 19, 30, 0, tl), `"2009-11-10T23:19:30-0600"`},
 		{time.Date(2009, time.November, 10, 13, 19, 4, 0, tl), `"2009-11-10T13:19:04-0600"`},
+		{time.Time{}, `null`},
 	}
 
 	for _, c := range cases {
