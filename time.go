@@ -83,13 +83,10 @@ func (t *TimeWithZone) IsNull() bool {
 
 // ParseTime reads the provided ISO time string and creates a time object
 func ParseTime(timeString string) (Time, error) {
-	o, err := time.Parse(TimeFormat, timeString)
+	// Short parsing has magic to read decimals (thanks Oleg!)
+	o, err := time.Parse(TimeFormatShort, timeString)
 	if err != nil {
-		var errShort error
-		o, errShort = time.Parse(TimeFormatShort, timeString)
-		if errShort != nil {
-			return Time{nullTime}, fmt.Errorf("unable to parse time, tried two formats. %s; %s", err, errShort)
-		}
+		return Time{nullTime}, fmt.Errorf("unable to parse time in UTC: %s", err)
 	}
 	return Time{o}, nil
 }
@@ -99,7 +96,7 @@ func ParseTime(timeString string) (Time, error) {
 func ParseTimeWithZone(timeString string) (TimeWithZone, error) {
 	o, err := time.Parse(TimeFormatWithZone, timeString)
 	if err != nil {
-		return TimeWithZone{nullTime}, fmt.Errorf("unable to parse time with zone. %s", err)
+		return TimeWithZone{nullTime}, fmt.Errorf("unable to parse time with zone: %s", err)
 	}
 	return TimeWithZone{o}, nil
 }

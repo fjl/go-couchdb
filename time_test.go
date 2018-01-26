@@ -13,7 +13,7 @@ func TestTimeUnmarshal(t *testing.T) {
 		Error    bool
 	}{
 		// long form
-		{`"2009-11-10T23:19:45.000Z"`, time.Date(2009, time.November, 10, 23, 19, 45, 0, time.UTC), false},
+		{`"2009-11-10T23:19:45.123Z"`, time.Date(2009, time.November, 10, 23, 19, 45, 123000000, time.UTC), false},
 		// short form
 		{`"2009-11-10T13:19:04Z"`, time.Date(2009, time.November, 10, 13, 19, 4, 0, time.UTC), false},
 		// bad form
@@ -41,6 +41,7 @@ func TestTimeMarshal(t *testing.T) {
 	}{
 		{time.Date(2009, time.November, 10, 23, 19, 45, 0, time.UTC), `"2009-11-10T23:19:45.000Z"`},
 		{time.Date(2009, time.November, 10, 13, 19, 4, 0, time.UTC), `"2009-11-10T13:19:04.000Z"`},
+		{time.Date(2009, time.November, 10, 23, 19, 45, 123456000, time.UTC), `"2009-11-10T23:19:45.123Z"`},
 		{time.Time{}, `null`},
 	}
 
