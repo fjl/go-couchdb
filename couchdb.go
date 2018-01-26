@@ -271,6 +271,7 @@ func (db *DB) SyncDesign(d *Design) error {
 			return nil
 		}
 	}
+	d.Rev = "" // Prevent conflicts when switching databases
 	if rev, err := db.Put(d.ID, d, prev.Rev); err != nil {
 		return err
 	} else {
