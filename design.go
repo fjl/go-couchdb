@@ -12,17 +12,17 @@ import (
 // At the moment we're only support very basic design documents with views,
 // please feel free to add new properties.
 type Design struct {
-	ID       string `json:"_id"`
-	Rev      string `json:"_rev,omitempty"`
-	Language string `json:"language"`
+	ID       string `json:"_id" yaml:"_id"`
+	Rev      string `json:"_rev,omitempty" yaml:"_rev"`
+	Language string `json:"language" yaml:"language"`
 
-	Views map[string]*View `json:"views,omitempty"`
+	Views map[string]*View `json:"views,omitempty" yaml:"views"`
 }
 
 // View is a view definition to be used inside a Design document.
 type View struct {
-	Map    string `json:"map"`
-	Reduce string `json:"reduce,omitempty"`
+	Map    string `json:"map" yaml:"map"`
+	Reduce string `json:"reduce,omitempty" yaml:"reduce"`
 }
 
 // NewDesign will instantiate a design document instance with the base properties

@@ -86,6 +86,8 @@ func TestTimeWithZoneUnmarshal(t *testing.T) {
 		Error    bool
 	}{
 		// long form
+		{`"2009-11-10T23:19:45.123-0600"`, time.Date(2009, time.November, 10, 23, 19, 45, 123000000, tl), false},
+		// short form
 		{`"2009-11-10T23:19:45-0600"`, time.Date(2009, time.November, 10, 23, 19, 45, 0, tl), false},
 		// bad form
 		{`"Z2009-11-10T13:19:04Z"`, time.Time{}, true},
@@ -111,8 +113,8 @@ func TestTimeWithZoneMarshal(t *testing.T) {
 		Given    time.Time
 		Expected string
 	}{
-		{time.Date(2009, time.November, 10, 23, 19, 30, 0, tl), `"2009-11-10T23:19:30-0600"`},
-		{time.Date(2009, time.November, 10, 13, 19, 4, 0, tl), `"2009-11-10T13:19:04-0600"`},
+		{time.Date(2009, time.November, 10, 23, 19, 30, 0, tl), `"2009-11-10T23:19:30.000-0600"`},
+		{time.Date(2009, time.November, 10, 13, 19, 4, 123000000, tl), `"2009-11-10T13:19:04.123-0600"`},
 		{time.Time{}, `null`},
 	}
 

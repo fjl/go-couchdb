@@ -7,10 +7,11 @@ import (
 
 // ISOTimeFormat is the CouchDB time format
 const (
-	TimeFormat         = "2006-01-02T15:04:05.000Z"
-	TimeFormatShort    = "2006-01-02T15:04:05Z"
-	TimeFormatWithZone = "2006-01-02T15:04:05-0700"
-	nullString         = "null"
+	TimeFormat              = "2006-01-02T15:04:05.000Z"
+	TimeFormatShort         = "2006-01-02T15:04:05Z"
+	TimeFormatWithZone      = "2006-01-02T15:04:05.000-0700"
+	TimeFormatWithZoneShort = "2006-01-02T15:04:05-0700"
+	nullString              = "null"
 )
 
 // TimeNow return a new CouchTime with current time
@@ -94,7 +95,7 @@ func ParseTime(timeString string) (Time, error) {
 // ParseTimeWithZone reads the provided ISO time string and creates a time object
 // which references the zone.
 func ParseTimeWithZone(timeString string) (TimeWithZone, error) {
-	o, err := time.Parse(TimeFormatWithZone, timeString)
+	o, err := time.Parse(TimeFormatWithZoneShort, timeString)
 	if err != nil {
 		return TimeWithZone{nullTime}, fmt.Errorf("unable to parse time with zone: %s", err)
 	}
