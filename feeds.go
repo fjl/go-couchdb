@@ -1,6 +1,7 @@
 package couchdb
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -132,20 +133,35 @@ type ChangesFeed struct {
 // This feed receives an event whenever a document is created, updated or deleted.
 //
 // This implementation only continuous feeds.
-
+//
 // There are many other options that allow you to customize what the
 // feed returns. For information on all of them, see the official CouchDB
 // documentation:
 //
 // http://docs.couchdb.org/en/latest/api/database/changes.html#db-changes
 func (db *DB) ContinuousChanges(options Options) (*ChangesFeed, error) {
+	return db.continuousChanges("GET", options, nil)
+}
+
+// ContinuousChangesWithBody opens a regular changes feed, but uses a POST
+// that includes a JSON payload of the provided body.
+func (db *DB) ContinuousChangesWithBody(options Options, body interface{}) (*ChangesFeed, error) {
+	json, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	b := bytes.NewReader(json)
+	return db.continuousChanges("POST", options, b)
+}
+
+func (db *DB) continuousChanges(method string, options Options, body io.Reader) (*ChangesFeed, error) {
 	options["feed"] = "continuous"
 	path, err := optpath(options, nil, db.name, "_changes")
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := db.request("GET", path, nil)
+	resp, err := db.request(method, path, body)
 	if err != nil {
 		return nil, err
 	}

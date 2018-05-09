@@ -1,10 +1,12 @@
 package couchdb_test
 
 import (
-	"github.com/cabify/go-couchdb"
 	"io"
+	"io/ioutil"
 	. "net/http"
 	"testing"
+
+	"github.com/cabify/go-couchdb"
 )
 
 func TestDBUpdatesFeed(t *testing.T) {
@@ -114,4 +116,41 @@ func TestContinouousChangesFeed(t *testing.T) {
 	if err := feed.Close(); err != nil {
 		t.Fatalf("feed.Close error: %v", err)
 	}
+}
+
+func TestContinouousChangesFeedWithBody(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("POST /db/_changes", func(resp ResponseWriter, req *Request) {
+		body, _ := ioutil.ReadAll(req.Body)
+		check(t, "request body", "{\"doc_ids\":[\"doc\"]}", string(body))
+		io.WriteString(resp, `{
+			"seq": "1",
+			"id": "doc",
+			"deleted": true,
+			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
+		}`+"\n")
+		io.WriteString(resp, `{
+			"seq": "2",
+			"id": "doc",
+			"changes": [{"rev":"1-619db7ba8551c0de3f3a178775509611"}]
+		}`+"\n")
+		io.WriteString(resp, `{
+			"seq": "99",
+			"last_seq": "99"
+		}`+"\n")
+	})
+
+	body := struct {
+		DocIDs []string `json:"doc_ids"`
+	}{
+		DocIDs: []string{"doc"},
+	}
+	opts := couchdb.Options{"filter": "_doc_ids"}
+	feed, err := c.DB("db").ContinuousChangesWithBody(opts, body)
+	if err != nil {
+		t.Fatalf("client.Changes error: %v", err)
+	}
+	ok, err := feed.Next()
+	check(t, "feed.Next()", true, ok)
+	check(t, "feed.Err()", error(nil), err)
 }
