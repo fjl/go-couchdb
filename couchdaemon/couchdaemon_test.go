@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 	"time"
-	)
+)
 
 type testHost struct {
 	output   chan []byte
@@ -267,7 +267,7 @@ func TestServerURL(t *testing.T) {
 		// Discard the two output results
 		<-th.output
 		<-th.output
-	} ()
+	}()
 
 	respurl, err := ServerURL()
 	if err != nil {

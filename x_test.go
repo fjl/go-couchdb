@@ -59,7 +59,7 @@ func (s *testClient) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func newTestClient(t *testing.T) *testClient {
 	tc := &testClient{t: t, handlers: make(map[string]http.Handler)}
-	client  := couchdb.NewClient(asURL("http://testClient:5984/"), &http.Client{Transport:tc}, nil)
+	client := couchdb.NewClient(asURL("http://testClient:5984/"), &http.Client{Transport: tc}, nil)
 	tc.Client = client
 	return tc
 }
