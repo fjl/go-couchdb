@@ -30,6 +30,6 @@ e.g. fetching values from the CouchDB config.
 
 # Tests
 
-You can run the unit tests with `go test`.
+You can run the unit tests with `make test`.
 
 [![Build Status](https://travis-ci.org/cabify/go-couchdb.png?branch=master)](https://travis-ci.org/cabify/go-couchdb)
