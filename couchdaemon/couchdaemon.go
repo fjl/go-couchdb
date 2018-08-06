@@ -42,7 +42,7 @@ func Init(exit chan<- struct{}) {
 		if exit == nil {
 			start(os.Stdin, os.Stdout, func() { os.Exit(0) })
 		} else {
-			start(os.Stdin, os.Stdout, func() { os.Exit(0) })
+			start(os.Stdin, os.Stdout, func() { close(exit) })
 		}
 	})
 }
