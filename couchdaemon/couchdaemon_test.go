@@ -2,7 +2,6 @@ package couchdaemon
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"io"
 	"reflect"
@@ -11,7 +10,7 @@ import (
 )
 
 type testHost struct {
-	output   *bytes.Buffer
+	output   chan []byte
 	exitchan chan struct{}
 	config   testConfig
 	outW     io.Closer
@@ -23,7 +22,7 @@ func startTestHost(t *testing.T, config testConfig) *testHost {
 	inR, inW := io.Pipe()   // input stream (testHost writes, daemon reads)
 	outR, outW := io.Pipe() // output stream (testHost reads, daemon writes)
 	th := &testHost{
-		output:   new(bytes.Buffer),
+		output:   make(chan []byte),
 		exitchan: make(chan struct{}),
 		config:   config,
 		outW:     outW,
@@ -39,7 +38,6 @@ func startTestHost(t *testing.T, config testConfig) *testHost {
 				return
 			}
 
-			th.output.Write(line)
 			if err := json.Unmarshal(line, &req); err != nil {
 				t.Errorf("testHost: could not decode request: %v", err)
 				return
@@ -64,6 +62,8 @@ func startTestHost(t *testing.T, config testConfig) *testHost {
 			default:
 				t.Errorf("testHost: unmatched request")
 			}
+
+			th.output <- line
 		}
 	}()
 
@@ -78,26 +78,26 @@ func (th *testHost) stop() {
 
 func TestNotInitialized(t *testing.T) {
 	if _, err := ConfigSection("s"); err != ErrNotInitialized {
-		t.Errorf("ConfigSection err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("ConfigSection err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	if _, err := ConfigVal("s", "k"); err != ErrNotInitialized {
-		t.Errorf("ConfigVal err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("ConfigVal err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	if _, err := ServerURL(); err != ErrNotInitialized {
-		t.Errorf("ServerURL err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("ServerURL err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	log := NewLogWriter()
 	if _, err := log.Write([]byte("foo")); err != ErrNotInitialized {
-		t.Errorf("log.Write err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("log.Write err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	if err := log.Err("foo"); err != ErrNotInitialized {
-		t.Errorf("log.Err err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("log.Err err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	if err := log.Info("foo"); err != ErrNotInitialized {
-		t.Errorf("log.Info err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("log.Info err mismatch, got %v, want ErrNotInitialized", err)
 	}
 	if err := log.Debug("foo"); err != ErrNotInitialized {
-		t.Errorf("log.Debug err mismatch, got %v, want ErrNotInitialized")
+		t.Errorf("log.Debug err mismatch, got %v, want ErrNotInitialized", err)
 	}
 }
 
@@ -115,8 +115,9 @@ func TestLogWrite(t *testing.T) {
 	if n != len(msg) {
 		t.Errorf("short write: %v != %v", n, len(msg))
 	}
-	if th.output.String() != `["log","a\"bc"]`+"\n" {
-		t.Errorf("wrong JSON output: %s", th.output.String())
+
+	if res := <-th.output; string(res) != `["log","a\"bc"]`+"\n" {
+		t.Errorf("wrong JSON output: %s", res)
 	}
 }
 
@@ -128,7 +129,7 @@ func TestLogWriteError(t *testing.T) {
 
 	log := NewLogWriter()
 	if _, err := log.Write([]byte("msg")); err != io.ErrClosedPipe {
-		t.Errorf(`log.Write("msg") err mismatch, got %v, want io.ErrClosedPipe`)
+		t.Errorf(`log.Write("msg") err mismatch, got %v, want io.ErrClosedPipe`, err)
 	}
 }
 
@@ -147,12 +148,11 @@ func TestLogLevels(t *testing.T) {
 	}
 
 	for _, testcase := range cases {
-		th.output.Reset()
 		if err := testcase.method("msg"); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if th.output.String() != testcase.output+"\n" {
-			t.Errorf("wrong JSON output: %s", th.output.String())
+		if res := <-th.output; string(res) != testcase.output+"\n" {
+			t.Errorf("wrong JSON output: %s", res)
 		}
 	}
 }
@@ -171,8 +171,8 @@ func TestConfigVal(t *testing.T) {
 	if val != expVal {
 		t.Errorf(`ConfigVal("a", "b") got: %q, want: %q`, val, expVal)
 	}
-	if th.output.String() != `["get","a","b"]`+"\n" {
-		t.Errorf("wrong JSON output: %q", th.output.String())
+	if res := <-th.output; string(res) != `["get","a","b"]`+"\n" {
+		t.Errorf("wrong JSON output: %q", res)
 	}
 }
 
@@ -221,8 +221,8 @@ func TestConfigSection(t *testing.T) {
 	if !reflect.DeepEqual(val, expVal) {
 		t.Errorf(`ConfigSection("section1") got: %v, want %v`, val, expVal)
 	}
-	if th.output.String() != `["get","section1"]`+"\n" {
-		t.Errorf("wrong JSON output: %q", th.output.String())
+	if res := <-th.output; string(res) != `["get","section1"]`+"\n" {
+		t.Errorf("wrong JSON output: %q", res)
 	}
 }
 
@@ -262,6 +262,13 @@ func TestServerURL(t *testing.T) {
 	defer th.stop()
 
 	expVal := "http://127.0.0.1:5984/"
+
+	go func() {
+		// Discard the two output results
+		<-th.output
+		<-th.output
+	}()
+
 	respurl, err := ServerURL()
 	if err != nil {
 		t.Fatalf("ServerURL() returned error: %v", err)
