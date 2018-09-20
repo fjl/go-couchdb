@@ -1,6 +1,7 @@
 package couchdb_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -67,6 +68,17 @@ func TestNewClient(t *testing.T) {
 			c.SetAuth(test.SetAuth)
 		}
 		c.Ping() // trigger round trip
+	}
+}
+
+func TestContext(t *testing.T) {
+	c := newTestClient(t)
+	nc := c.Context(context.TODO())
+	if c.Client == nc {
+		t.Errorf("context object not replaced")
+	}
+	if nc.GetContext() == c.GetContext() {
+		t.Errorf("expect contexts to change")
 	}
 }
 

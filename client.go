@@ -36,6 +36,11 @@ func (c *Client) Context(ctx context.Context) *Client {
 	return &nc
 }
 
+// GetContext provides the current context for the Client.
+func (c *Client) GetContext() context.Context {
+	return c.ctx
+}
+
 // URL returns the URL prefix of the server.
 // The url will not contain a trailing '/'.
 func (c *Client) URL() string {

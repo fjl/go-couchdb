@@ -29,6 +29,11 @@ func (db *DB) Context(ctx context.Context) *DB {
 	return &ndb
 }
 
+// GetContext provides the database objects current context.
+func (db *DB) GetContext() context.Context {
+	return db.ctx
+}
+
 // Name returns the name of a database.
 func (db *DB) Name() string {
 	return db.name
