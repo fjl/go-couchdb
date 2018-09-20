@@ -27,7 +27,7 @@ func (db *DB) Attachment(docid, name, rev string) (*Attachment, error) {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	resp, err := db.request("GET", revpath(rev, db.name, docid, name), nil)
+	resp, err := db.request(db.ctx, "GET", revpath(rev, db.name, docid, name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (db *DB) AttachmentMeta(docid, name, rev string) (*Attachment, error) {
 	}
 
 	path := revpath(rev, db.name, docid, name)
-	resp, err := db.closedRequest("HEAD", path, nil)
+	resp, err := db.closedRequest(db.ctx, "HEAD", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (db *DB) PutAttachment(docid string, att *Attachment, rev string) (newrev s
 	}
 
 	path := revpath(rev, db.name, docid, att.Name)
-	req, err := db.newRequest("PUT", path, att.Body)
+	req, err := db.newRequest(db.ctx, "PUT", path, att.Body)
 	if err != nil {
 		return rev, err
 	}
@@ -101,7 +101,7 @@ func (db *DB) DeleteAttachment(docid, name, rev string) (newrev string, err erro
 	}
 
 	path := revpath(rev, db.name, docid, name)
-	resp, err := db.closedRequest("DELETE", path, nil)
+	resp, err := db.closedRequest(db.ctx, "DELETE", path, nil)
 	return responseRev(resp, err)
 }
 
