@@ -73,11 +73,11 @@ func TestNewClient(t *testing.T) {
 
 func TestContext(t *testing.T) {
 	c := newTestClient(t)
-	nc := c.Context(context.TODO())
+	nc := c.WithContext(context.TODO())
 	if c.Client == nc {
 		t.Errorf("context object not replaced")
 	}
-	if nc.GetContext() == c.GetContext() {
+	if nc.Context() == c.Context() {
 		t.Errorf("expect contexts to change")
 	}
 }

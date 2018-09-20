@@ -57,7 +57,9 @@ func (t *transport) newRequest(ctx context.Context, method, path string, body io
 	if err != nil {
 		return nil, err
 	}
-	req.WithContext(ctx)
+	if ctx != context.Background() { // Save unnecessary copying
+		req = req.WithContext(ctx)
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.auth != nil {

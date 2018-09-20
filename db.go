@@ -18,19 +18,20 @@ type DB struct {
 	ctx  context.Context
 }
 
-// Context returns a new copy of the database object with the
+// WithContext returns a new copy of the database object with the
 // new context set. Use like:
 //
-//   db.Context(ctx).Post(doc)
+//   db.WithContext(ctx).Post(doc)
 //
-func (db *DB) Context(ctx context.Context) *DB {
-	ndb := *db
-	db.ctx = ctx
-	return &ndb
+func (db *DB) WithContext(ctx context.Context) *DB {
+	db2 := new(DB)
+	*db2 = *db
+	db2.ctx = ctx
+	return db2
 }
 
-// GetContext provides the database objects current context.
-func (db *DB) GetContext() context.Context {
+// Context provides the database objects current context.
+func (db *DB) Context() context.Context {
 	return db.ctx
 }
 

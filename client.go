@@ -28,16 +28,16 @@ func NewClient(addr *url.URL, client *http.Client, auth Auth) *Client {
 	return &Client{newTransport(prefixAddr.String(), client, auth), context.Background()}
 }
 
-// Context sets the Client's context and returns a new copy of the object with the
-// new context set.
-func (c *Client) Context(ctx context.Context) *Client {
-	nc := *c
-	nc.ctx = ctx
-	return &nc
+// WithContext returns a copy of the Client with the new context set.
+func (c *Client) WithContext(ctx context.Context) *Client {
+	c2 := new(Client)
+	*c2 = *c
+	c2.ctx = ctx
+	return c2
 }
 
-// GetContext provides the current context for the Client.
-func (c *Client) GetContext() context.Context {
+// Context provides the current context for the Client.
+func (c *Client) Context() context.Context {
 	return c.ctx
 }
 
