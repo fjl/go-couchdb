@@ -2,6 +2,7 @@ package couchdb
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,10 +52,13 @@ func (t *transport) setAuth(a Auth) {
 	t.mu.Unlock()
 }
 
-func (t *transport) newRequest(method, path string, body io.Reader) (*http.Request, error) {
+func (t *transport) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, t.prefix+path, body)
 	if err != nil {
 		return nil, err
+	}
+	if ctx != context.Background() { // Save unnecessary copying
+		req = req.WithContext(ctx)
 	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -70,8 +74,8 @@ func (t *transport) newRequest(method, path string, body io.Reader) (*http.Reque
 // encoded query string.
 //
 // Status codes >= 400 are treated as errors.
-func (t *transport) request(method, path string, body io.Reader) (*http.Response, error) {
-	req, err := t.newRequest(method, path, body)
+func (t *transport) request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := t.newRequest(ctx, method, path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +93,8 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 }
 
 // closedRequest sends an HTTP request and discards the response body.
-func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Response, error) {
-	resp, err := t.request(method, path, body)
+func (t *transport) closedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	resp, err := t.request(ctx, method, path, body)
 	if err == nil {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()

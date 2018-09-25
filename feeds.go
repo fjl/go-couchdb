@@ -42,7 +42,7 @@ func (c *Client) DBUpdates(options Options) (*DBUpdatesFeed, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.request("GET", path, nil)
+	resp, err := c.request(c.ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (db *DB) continuousChanges(method string, options Options, body io.Reader) 
 		return nil, err
 	}
 
-	resp, err := db.request(method, path, body)
+	resp, err := db.request(db.ctx, method, path, body)
 	if err != nil {
 		return nil, err
 	}
