@@ -2,6 +2,7 @@ package couchdb_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -193,8 +194,9 @@ func TestPutSecurity(t *testing.T) {
 }
 
 type testDocument struct {
+	ID    string `json:"_id,omitempty"`
 	Rev   string `json:"_rev,omitempty"`
-	Field int64  `json:"field"`
+	Field int    `json:"field"`
 }
 
 func TestGetExistingDoc(t *testing.T) {
@@ -212,7 +214,7 @@ func TestGetExistingDoc(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
-	check(t, "doc.Field", int64(999), doc.Field)
+	check(t, "doc.Field", 999, doc.Field)
 }
 
 func TestGetNonexistingDoc(t *testing.T) {
@@ -225,6 +227,40 @@ func TestGetNonexistingDoc(t *testing.T) {
 	var doc testDocument
 	err := c.DB("db").Get("doc", doc, nil)
 	check(t, "couchdb.NotFound(err)", true, couchdb.NotFound(err))
+}
+
+func TestBulkGet(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("POST /db/_bulk_get", func(resp http.ResponseWriter, req *http.Request) {
+		reqData := couchdb.BulkGet{}
+		body, _ := ioutil.ReadAll(req.Body)
+		err := json.Unmarshal(body, &reqData)
+		check(t, "reqData.Docs[0].ID", "foo", reqData.Docs[0].ID)
+		check(t, "reqData.Docs[1].ID", "bar", reqData.Docs[1].ID)
+		check(t, "reqData.Docs[2].ID", "baz", reqData.Docs[2].ID)
+		check(t, "json.Unmarshal", nil, err)
+
+		io.WriteString(resp, `{"results":[
+			{"id":"foo","docs":[{"ok":{"_id":"foo","_rev":"4-753875d51501a6b1883a9d62b4d33f91","field":1}}]},
+			{"id":"bar","docs":[{"ok":{"_id":"bar","_rev":"2-9b71d36dfdd9b4815388eb91cc8fb61d","field":2}}]},
+			{"id":"baz","docs":[{"error":{"id":"baz","rev":"undefined","error":"not_found","reason":"missing"}}]}]}`)
+	})
+
+	docs, notFound, err := c.DB("db").BulkGet([]string{"foo", "bar", "baz"}, &testDocument{}, nil)
+	check(t, "err", nil, err)
+	check(t, "notFound", []string{"baz"}, notFound)
+
+	for _, doc := range docs {
+		document := doc.(*testDocument)
+		switch document.ID {
+		case "foo":
+			check(t, "foo.Rev", "4-753875d51501a6b1883a9d62b4d33f91", document.Rev)
+			check(t, "foo.Field", 1, document.Field)
+		case "bar":
+			check(t, "foo.Rev", "2-9b71d36dfdd9b4815388eb91cc8fb61d", document.Rev)
+			check(t, "foo.Field", 2, document.Field)
+		}
+	}
 }
 
 func TestRev(t *testing.T) {

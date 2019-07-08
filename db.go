@@ -61,6 +61,53 @@ func (db *DB) Get(id string, doc interface{}, opts Options) error {
 	return readBody(resp, &doc)
 }
 
+// BulkGet retrieves several documents by their ID.
+// It accepts a list of ID, a pointer to a struct acting as a response type and an Options struct.
+// It returns the list of found docs as a []interface{}, the list of docs not found as a []string and an eventual error.
+// The found docs should be casted to the same type of docType
+func (db *DB) BulkGet(ids []string, docType interface{}, opts Options) (docs []interface{}, notFound []string, err error) {
+	path, err := optpath(opts, getJsonKeys, db.name, "_bulk_get")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	request := &BulkGet{}
+	for _, id := range ids {
+		request.Docs = append(request.Docs, struct{ ID string }{ID: id})
+	}
+
+	bodyJson, err := json.Marshal(request)
+	body := bytes.NewReader(bodyJson)
+
+	resp, err := db.request(db.ctx, "POST", path, body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	response := bulkResp{}
+	err = readBody(resp, &response)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, result := range response.Results {
+		if len(result.Docs) > 0 {
+			wrapper := result.Docs[0]
+			if wrapper.Error != nil || wrapper.Ok == nil {
+				notFound = append(notFound, result.Id)
+			} else if wrapper.Ok != nil {
+				err := json.Unmarshal(*wrapper.Ok, docType)
+				if err != nil {
+					return nil, nil, err
+				}
+				docs = append(docs, docType)
+			}
+		}
+	}
+
+	return docs, notFound, nil
+}
+
 // Rev fetches the current revision of a document.
 // It is faster than an equivalent Get request because no body
 // has to be parsed.
