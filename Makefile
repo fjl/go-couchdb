@@ -10,3 +10,6 @@ fmt: ## Fix code formatting
 help: ## Display help
 	awk 'BEGIN { FS=": ##"; } /^[a-zA-Z_-]+: ##/ { printf("%-10s %s\n", $$1, $$2); }' $(MAKEFILE_LIST) | sort
 
+.PHONY: tidy
+tidy: ## tidy go.mod and go.sum
+	go mod tidy
