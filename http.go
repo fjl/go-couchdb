@@ -72,6 +72,10 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 	if err != nil {
 		return nil, err
 	}
+	if body != nil {
+		req.Header.Set("content-type", "application/json")
+	}
+
 	resp, err := t.http.Do(req)
 	if err != nil {
 		return nil, err
