@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,10 +121,20 @@ func optpath(opts Options, jskeys []string, segs ...string) (string, error) {
 }
 
 func encopts(opts Options, jskeys []string) (string, error) {
+	// Sort keys by name.
+	var keys = make([]string, len(opts))
+	var i int
+	for k := range opts {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+
+	// Encode to query string.
 	buf := new(bytes.Buffer)
 	buf.WriteRune('?')
 	amp := false
-	for k, v := range opts {
+	for _, k := range keys {
 		if amp {
 			buf.WriteByte('&')
 		}
@@ -137,13 +148,13 @@ func encopts(opts Options, jskeys []string) (string, error) {
 			}
 		}
 		if isjson {
-			jsonv, err := json.Marshal(v)
+			jsonv, err := json.Marshal(opts[k])
 			if err != nil {
 				return "", fmt.Errorf("invalid option %q: %v", k, err)
 			}
 			buf.WriteString(url.QueryEscape(string(jsonv)))
 		} else {
-			if err := encval(buf, k, v); err != nil {
+			if err := encval(buf, k, opts[k]); err != nil {
 				return "", fmt.Errorf("invalid option %q: %v", k, err)
 			}
 		}
