@@ -2,13 +2,14 @@ package couchdb_test
 
 import (
 	"errors"
-	"github.com/fjl/go-couchdb"
 	"io"
 	"io/ioutil"
 	. "net/http"
 	"net/url"
 	"regexp"
 	"testing"
+
+	"github.com/fjl/go-couchdb"
 )
 
 type roundTripperFunc func(*Request) (*Response, error)
@@ -117,7 +118,7 @@ func TestAllDBs(t *testing.T) {
 }
 
 // those are re-used across several tests
-var securityObjectJSON = regexp.MustCompile("\\s").ReplaceAllString(
+var securityObjectJSON = regexp.MustCompile(`\s`).ReplaceAllString(
 	`{
 		"admins": {
 			"names": ["adminName1", "adminName2"]

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -183,7 +184,7 @@ func (db *DB) Security() (*Security, error) {
 		// empty reply means defaults
 		return secobj, nil
 	}
-	if err = readBody(resp, secobj); err != nil {
+	if err = readBody(resp, secobj); err != nil && err != io.EOF {
 		return nil, err
 	}
 	return secobj, nil
