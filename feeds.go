@@ -225,6 +225,15 @@ func (f *ChangesFeed) Close() error {
 	return f.conn.Close()
 }
 
+// ChangesRevs returns the rev list of the current result row.
+func (f *ChangesFeed) ChangesRevs() []string {
+	revs := make([]string, len(f.Changes))
+	for i, x := range f.Changes {
+		revs[i] = x.Rev
+	}
+	return revs
+}
+
 func (f *ChangesFeed) contParser(r io.Reader) func() error {
 	dec := json.NewDecoder(r)
 	return func() error {
