@@ -54,7 +54,7 @@ func startTestHost(t *testing.T, config testConfig) *testHost {
 			case len(req) <= 1:
 				t.Errorf("request array to short")
 			case req[0] == "log":
-				break
+				// no response
 			case req[0] == "get" && req[1] == "garbage":
 				io.WriteString(inW, "garbage line\n")
 			case req[0] == "get" && len(req) == 2:
