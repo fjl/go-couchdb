@@ -1,10 +1,11 @@
 package couchdb_test
 
 import (
-	"github.com/fjl/go-couchdb"
 	"io"
 	. "net/http"
 	"testing"
+
+	"github.com/fjl/go-couchdb"
 )
 
 func TestDBUpdatesFeed(t *testing.T) {
@@ -13,12 +14,12 @@ func TestDBUpdatesFeed(t *testing.T) {
 		check(t, "request query string", "feed=continuous", req.URL.RawQuery)
 		io.WriteString(resp, `{
 			"db_name": "db",
-			"ok": true,
+			"seq": "1-...",
 			"type": "created"
 		}`+"\n")
 		io.WriteString(resp, `{
 			"db_name": "db2",
-			"ok": false,
+			"seq": "4-...",
 			"type": "deleted"
 		}`+"\n")
 	})
@@ -34,7 +35,7 @@ func TestDBUpdatesFeed(t *testing.T) {
 
 	check(t, "feed.DB", "db", feed.DB)
 	check(t, "feed.Event", "created", feed.Event)
-	check(t, "feed.OK", true, feed.OK)
+	check(t, "feed.Seq", "1-...", feed.Seq)
 
 	t.Log("-- second event")
 	check(t, "feed.Next()", true, feed.Next())
@@ -42,7 +43,7 @@ func TestDBUpdatesFeed(t *testing.T) {
 
 	check(t, "feed.DB", "db2", feed.DB)
 	check(t, "feed.Event", "deleted", feed.Event)
-	check(t, "feed.OK", false, feed.OK)
+	check(t, "feed.Seq", "4-...", feed.Seq)
 
 	t.Log("-- end of feed")
 	check(t, "feed.Next()", false, feed.Next())
@@ -50,6 +51,7 @@ func TestDBUpdatesFeed(t *testing.T) {
 
 	check(t, "feed.DB", "", feed.DB)
 	check(t, "feed.Event", "", feed.Event)
+	check(t, "feed.Seq", "", feed.Seq)
 	check(t, "feed.OK", false, feed.OK)
 
 	if err := feed.Close(); err != nil {

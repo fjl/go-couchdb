@@ -22,8 +22,9 @@ import (
 //     ...
 type DBUpdatesFeed struct {
 	Event string `json:"type"`    // "created" | "updated" | "deleted"
-	OK    bool   `json:"ok"`      // Event operation status
 	DB    string `json:"db_name"` // Event database name
+	Seq   string `json:"seq"`     // Update sequence of the event.
+	OK    bool   `json:"ok"`      // Event operation status (deprecated)
 
 	end  bool
 	err  error
@@ -60,7 +61,7 @@ func (f *DBUpdatesFeed) Next() bool {
 	if f.end {
 		return false
 	}
-	f.Event, f.DB, f.OK = "", "", false
+	f.Event, f.DB, f.Seq, f.OK = "", "", "", false
 	if f.err = f.dec.Decode(f); f.err != nil {
 		if f.err == io.EOF {
 			f.err = nil
