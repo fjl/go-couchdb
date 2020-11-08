@@ -4,12 +4,12 @@ package couchdb_test
 
 import (
 	"bytes"
-	"github.com/fjl/go-couchdb"
-	"io/ioutil"
 	. "net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/fjl/go-couchdb"
 )
 
 // testClient is a very special couchdb.Client that also implements
@@ -43,18 +43,7 @@ func (s *testClient) RoundTrip(req *Request) (*Response, error) {
 	recorder := httptest.NewRecorder()
 	recorder.Body = new(bytes.Buffer)
 	handler.ServeHTTP(recorder, req)
-	resp := &Response{
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		StatusCode:    recorder.Code,
-		Status:        StatusText(recorder.Code),
-		Header:        recorder.HeaderMap,
-		ContentLength: int64(recorder.Body.Len()),
-		Body:          ioutil.NopCloser(recorder.Body),
-		Request:       req,
-	}
-	return resp, nil
+	return recorder.Result(), nil
 }
 
 func newTestClient(t *testing.T) *testClient {

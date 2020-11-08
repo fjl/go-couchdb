@@ -75,7 +75,7 @@ func (t *transport) request(method, path string, body io.Reader) (*http.Response
 	if err != nil {
 		return nil, err
 	} else if resp.StatusCode >= 400 {
-		return nil, parseError(resp) // the Body is closed by parseError
+		return nil, parseError(req, resp) // the Body is closed by parseError
 	} else {
 		return resp, nil
 	}
@@ -243,16 +243,16 @@ func ErrorStatus(err error, statusCode int) bool {
 	return ok && dberr.StatusCode == statusCode
 }
 
-func parseError(resp *http.Response) error {
+func parseError(req *http.Request, resp *http.Response) error {
 	var reply struct{ Error, Reason string }
-	if resp.Request.Method != "HEAD" {
+	if req.Method != "HEAD" {
 		if err := readBody(resp, &reply); err != nil {
 			return fmt.Errorf("couldn't decode CouchDB error: %v", err)
 		}
 	}
 	return &Error{
-		Method:     resp.Request.Method,
-		URL:        resp.Request.URL.String(),
+		Method:     req.Method,
+		URL:        req.URL.String(),
 		StatusCode: resp.StatusCode,
 		ErrorCode:  reply.Error,
 		Reason:     reply.Reason,
