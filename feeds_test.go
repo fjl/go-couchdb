@@ -111,10 +111,7 @@ func TestChangesFeedPoll_Doc(t *testing.T) {
 	check(t, "feed.Seq", "1-...", feed.Seq)
 	check(t, "feed.Deleted", true, feed.Deleted)
 	check(t, "feed.Doc", json.RawMessage(`{"x": "y"}`), feed.Doc)
-	rev := []struct {
-		Rev string `json:"rev"`
-	}{{Rev: "1-619db7ba8551c0de3f3a178775509611"}}
-	check(t, "feed.Changes", rev, feed.Changes)
+	check(t, "feed.ChangesRevs", []string{"1-619db7ba8551c0de3f3a178775509611"}, feed.ChangesRevs())
 
 	t.Log("-- end of feed")
 	check(t, "feed.Next()", false, feed.Next())
@@ -316,10 +313,7 @@ func TestChangesFeedCont_Doc(t *testing.T) {
 	check(t, "feed.Seq", "1-...", feed.Seq)
 	check(t, "feed.Deleted", true, feed.Deleted)
 	check(t, "feed.Doc", json.RawMessage(`{"x": "y"}`), feed.Doc)
-	rev := []struct {
-		Rev string `json:"rev"`
-	}{{Rev: "1-619db7ba8551c0de3f3a178775509611"}}
-	check(t, "feed.Changes", rev, feed.Changes)
+	check(t, "feed.ChangesRevs", []string{"1-619db7ba8551c0de3f3a178775509611"}, feed.ChangesRevs())
 
 	t.Log("-- end of feed")
 	check(t, "feed.Next()", false, feed.Next())
