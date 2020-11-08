@@ -7,6 +7,7 @@ import (
 	. "net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/fjl/go-couchdb"
@@ -142,6 +143,7 @@ var securityObject = &couchdb.Security{
 func TestSecurity(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
+		resp.Header().Set("content-length", strconv.Itoa(len(securityObjectJSON)))
 		io.WriteString(resp, securityObjectJSON)
 	})
 
@@ -155,7 +157,8 @@ func TestSecurity(t *testing.T) {
 func TestEmptySecurity(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/_security", func(resp ResponseWriter, req *Request) {
-		// CouchDB returns an empty reply if no security object has been set
+		// CouchDB returns an empty response if no security object has been set.
+		resp.Header().Set("content-length", "0")
 		resp.WriteHeader(200)
 	})
 

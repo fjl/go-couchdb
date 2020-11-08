@@ -186,10 +186,8 @@ func (db *DB) Security() (*Security, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.ContentLength == 0 {
-		// empty reply means defaults
-		return secobj, nil
-	}
+	// The extra check for io.EOF is there because empty responses are OK.
+	// CouchDB returns an empty response if no security object has been set.
 	if err = readBody(resp, secobj); err != nil && err != io.EOF {
 		return nil, err
 	}
