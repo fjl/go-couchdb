@@ -95,36 +95,87 @@ func (t *transport) closedRequest(method, path string, body io.Reader) (*http.Re
 	return resp, err
 }
 
-func path(segs ...string) string {
-	r := ""
-	for _, seg := range segs {
-		r += "/"
-		r += url.QueryEscape(seg)
-	}
-	return r
+// pathBuilder assists with constructing CouchDB request paths.
+type pathBuilder struct {
+	buf     bytes.Buffer
+	inQuery bool
 }
 
-func revpath(rev string, segs ...string) string {
-	r := path(segs...)
+// dbpath returns the root path to a database.
+func dbpath(name string) string {
+	// TODO: would be nice to use url.PathEscape here,
+	// but it only became available in Go 1.8.
+	return "/" + url.QueryEscape(name)
+}
+
+// path returns the built path.
+func (p *pathBuilder) path() string {
+	return p.buf.String()
+}
+
+func (p *pathBuilder) checkNotInQuery() {
+	if p.inQuery {
+		panic("can't add path elements after query string")
+	}
+}
+
+// docID adds a document ID to the path.
+func (p *pathBuilder) docID(id string) *pathBuilder {
+	p.checkNotInQuery()
+
+	if len(id) > 0 && id[0] != '_' {
+		// Normal document IDs can't start with _, only 'reserved' document IDs can.
+		p.add(id)
+		return p
+	}
+	// However, it is still useful to be able to retrieve reserved documents such as
+	// design documents (path: _design/doc). Avoid escaping the first '/', but do escape
+	// anything after that.
+	slash := strings.IndexByte(id, '/')
+	if slash == -1 {
+		p.add(id)
+		return p
+	}
+	p.addRaw(id[:slash])
+	p.add(id[slash+1:])
+	return p
+}
+
+// add adds a segment to the path.
+func (p *pathBuilder) add(segment string) *pathBuilder {
+	p.checkNotInQuery()
+	p.buf.WriteByte('/')
+	// TODO: would be nice to use url.PathEscape here,
+	// but it only became available in Go 1.8.
+	p.buf.WriteString(url.QueryEscape(segment))
+	return p
+}
+
+// addRaw adds an unescaped segment to the path.
+func (p *pathBuilder) addRaw(path string) *pathBuilder {
+	p.checkNotInQuery()
+	p.buf.WriteByte('/')
+	p.buf.WriteString(path)
+	return p
+}
+
+// rev adds a revision to the query string.
+// It returns the built path.
+func (p *pathBuilder) rev(rev string) string {
+	p.checkNotInQuery()
+	p.inQuery = true
 	if rev != "" {
-		r += "?rev=" + url.QueryEscape(rev)
+		p.buf.WriteString("?rev=")
+		p.buf.WriteString(url.QueryEscape(rev))
 	}
-	return r
+	return p.path()
 }
 
-func optpath(opts Options, jskeys []string, segs ...string) (string, error) {
-	r := path(segs...)
-	if len(opts) > 0 {
-		os, err := encopts(opts, jskeys)
-		if err != nil {
-			return "", err
-		}
-		r += os
-	}
-	return r, nil
-}
+// options encodes the given options to the query.
+func (p *pathBuilder) options(opts Options, jskeys []string) (string, error) {
+	p.checkNotInQuery()
+	p.inQuery = true
 
-func encopts(opts Options, jskeys []string) (string, error) {
 	// Sort keys by name.
 	var keys = make([]string, len(opts))
 	var i int
@@ -135,15 +186,14 @@ func encopts(opts Options, jskeys []string) (string, error) {
 	sort.Strings(keys)
 
 	// Encode to query string.
-	buf := new(bytes.Buffer)
-	buf.WriteRune('?')
+	p.buf.WriteByte('?')
 	amp := false
 	for _, k := range keys {
 		if amp {
-			buf.WriteByte('&')
+			p.buf.WriteByte('&')
 		}
-		buf.WriteString(url.QueryEscape(k))
-		buf.WriteByte('=')
+		p.buf.WriteString(url.QueryEscape(k))
+		p.buf.WriteByte('=')
 		isjson := false
 		for _, jskey := range jskeys {
 			if k == jskey {
@@ -156,15 +206,15 @@ func encopts(opts Options, jskeys []string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("invalid option %q: %v", k, err)
 			}
-			buf.WriteString(url.QueryEscape(string(jsonv)))
+			p.buf.WriteString(url.QueryEscape(string(jsonv)))
 		} else {
-			if err := encval(buf, k, opts[k]); err != nil {
+			if err := encval(&p.buf, k, opts[k]); err != nil {
 				return "", fmt.Errorf("invalid option %q: %v", k, err)
 			}
 		}
 		amp = true
 	}
-	return buf.String(), nil
+	return p.path(), nil
 }
 
 func encval(w io.Writer, k string, v interface{}) error {
