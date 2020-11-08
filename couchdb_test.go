@@ -203,6 +203,22 @@ func TestGetExistingDoc(t *testing.T) {
 	check(t, "doc.Field", int64(999), doc.Field)
 }
 
+func TestGetDesignDoc(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("GET /db/_design/doc", func(resp ResponseWriter, req *Request) {
+		io.WriteString(resp, `{
+			"_id": "doc",
+			"_rev": "1-619db7ba8551c0de3f3a178775509611"
+		}`)
+	})
+
+	var doc testDocument
+	if err := c.DB("db").Get("_design/doc", &doc, nil); err != nil {
+		t.Fatal(err)
+	}
+	check(t, "doc.Rev", "1-619db7ba8551c0de3f3a178775509611", doc.Rev)
+}
+
 func TestGetNonexistingDoc(t *testing.T) {
 	c := newTestClient(t)
 	c.Handle("GET /db/doc", func(resp ResponseWriter, req *Request) {
@@ -237,6 +253,20 @@ func TestRev(t *testing.T) {
 	if _, ok := err.(*couchdb.Error); !ok {
 		t.Errorf("expected couchdb.Error, got %#+v", err)
 	}
+}
+
+func TestRevDBSlash(t *testing.T) {
+	c := newTestClient(t)
+	c.Handle("HEAD /test%2Fdb/doc%2Fid", func(resp ResponseWriter, req *Request) {
+		resp.Header().Set("ETag", `"1-619db7ba8551c0de3f3a178775509611"`)
+	})
+
+	db := c.DB("test/db")
+	rev, err := db.Rev("doc/id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "rev", "1-619db7ba8551c0de3f3a178775509611", rev)
 }
 
 func TestPut(t *testing.T) {

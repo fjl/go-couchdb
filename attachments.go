@@ -27,7 +27,8 @@ func (db *DB) Attachment(docid, name, rev string) (*Attachment, error) {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	resp, err := db.request("GET", revpath(rev, db.name, docid, name), nil)
+	path := db.path().docID(docid).addRaw(name).rev(rev)
+	resp, err := db.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (db *DB) AttachmentMeta(docid, name, rev string) (*Attachment, error) {
 		return nil, fmt.Errorf("couchdb.GetAttachment: empty attachment Name")
 	}
 
-	path := revpath(rev, db.name, docid, name)
+	path := db.path().docID(docid).addRaw(name).rev(rev)
 	resp, err := db.closedRequest("HEAD", path, nil)
 	if err != nil {
 		return nil, err
@@ -72,7 +73,7 @@ func (db *DB) PutAttachment(docid string, att *Attachment, rev string) (newrev s
 		return rev, fmt.Errorf("couchdb.PutAttachment: nil attachment Body")
 	}
 
-	path := revpath(rev, db.name, docid, att.Name)
+	path := db.path().docID(docid).addRaw(att.Name).rev(rev)
 	req, err := db.newRequest("PUT", path, att.Body)
 	if err != nil {
 		return rev, err
@@ -100,7 +101,7 @@ func (db *DB) DeleteAttachment(docid, name, rev string) (newrev string, err erro
 		return rev, fmt.Errorf("couchdb.PutAttachment: empty name")
 	}
 
-	path := revpath(rev, db.name, docid, name)
+	path := db.path().docID(docid).addRaw(name).rev(rev)
 	resp, err := db.closedRequest("DELETE", path, nil)
 	return responseRev(resp, err)
 }
