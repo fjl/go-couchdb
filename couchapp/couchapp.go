@@ -11,12 +11,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/fjl/go-couchdb"
 	"io/ioutil"
 	"mime"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/fjl/go-couchdb"
 )
 
 // DefaultIgnorePatterns contains the default list of glob patterns
@@ -181,7 +182,7 @@ func Store(db *couchdb.DB, docid string, doc Doc) (string, error) {
 
 // StoreAttachments uploads the files in a directory as attachments
 // to a document extension. The document does not need to exist in the
-// database. The MIME type of each file is guessed by the filename.
+// database. The MIME type of each file is guessed by x the filename.
 //
 // As with LoadDirectory, ignores is a slice of glob patterns
 // that are matched against the file/directory basename. If any one of them
